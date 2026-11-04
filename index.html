@@ -65,7 +65,7 @@
                 <i class="fa-solid fa-bullhorn mr-2"></i> সমিতির নোটিশ বোর্ড
             </div>
             <p id="noticeText" class="text-xs text-amber-900 leading-relaxed">
-                স্ট্যান্ডের ৩০০ মিটারের মধ্যে প্রবেশ করলেই সিরিয়াল স্বয়ংক্রিয়ভাবে (অটো-জয়েন্ট) সক্রিয় হবে। বিরতিতে যাওয়ার আগে কারণ মার্ক করা বাধ্যতামূলক।
+                স্ট্যান্ডের ৩০০ মিটারের মধ্যে প্রবেশ করলেই সিরিয়াল স্বয়ংক্রিয়ভাবে সক্রিয় হবে। বিরতিতে যাওয়ার আগে কারণ ও সময় মার্ক করা বাধ্যতামূলক।
             </p>
         </div>
 
@@ -491,15 +491,9 @@
             }
 
             let queue = [];
-            try {
-                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
-            } catch (e) {
-                queue = [];
-            }
-            
-            // সিরিয়ালে না থাকলেও রেজিস্টার্ড রাইডারদের ডাটা আপডেট হবে যাতে পরবর্তী অটো-জয়েন্টে কাজ করে
             let registeredDrivers = [];
             try {
+                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
                 registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
             } catch (e) {}
 
@@ -712,7 +706,6 @@
                             registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
                         } catch (e) {}
 
-                        // বর্তমান ব্যবহারকারীর আপডেট ডেটা রেজিস্টার্ড লিস্ট বা কিউ থেকে ফেচ করা
                         let regUser = registeredDrivers.find(d => d.phone === currentUser.phone);
                         if(regUser) {
                             currentUser.extraBonusDist = regUser.extraBonusDist || 0;
@@ -729,7 +722,6 @@
                         if (currentUser.specialTimerExpiry && nowTime < currentUser.specialTimerExpiry) {
                             hasSpecialTimerActive = true;
                         } else if (currentUser.specialTimerExpiry && nowTime >= currentUser.specialTimerExpiry && driverInQ && driverInQ.statusNote && driverInQ.statusNote.includes('বিরতি')) {
-                            // ব্রেক বা স্পেশাল সময় শেষ হয়ে গেলে অটো সিরিয়াল রিমুভ
                             queue = queue.filter(q => q.phone !== currentUser.phone);
                             try {
                                 localStorage.setItem('chandrima_queue', JSON.stringify(queue));
@@ -754,7 +746,6 @@
                             loadQueueData();
                         } else if (!canBeInQueue && isInQueue) {
                             let driverObj = queue.find(q => q.phone === currentUser.phone);
-                            // যদি কোনো ব্রেক বা কারণ সেট করা না থাকে, তবেই দূরত্ব অতিক্রম করলে অটো রিমুভ হবে
                             if (driverObj && (!driverObj.statusNote || driverObj.statusNote === 'অটো-জয়েন্ট' || driverObj.statusNote === 'ম্যানুয়াল')) {
                                 queue = queue.filter(q => q.phone !== currentUser.phone);
                                 try {
@@ -770,6 +761,7 @@
                     const distElement = document.getElementById('profileDistance');
                     if(distElement && currentUser) {
                         let timerText = hasSpecialTimerActive ? " (স্পেশাল টাইমার সচল)" : "";
+                        // রাইডার নিজে শুধু তার প্রোফাইলে তার নিজের সঠিক দূরত্ব দেখতে পাবে
                         distElement.innerText = `${dist} মিটার (সর্বোচ্চ সীমা: ${effectiveRadius}মি.)${timerText}`;
                         renderDriverActions(isWithinCurrentStand, dist, effectiveRadius, hasSpecialTimerActive);
                     }
@@ -858,7 +850,7 @@
                     driverInReg.breakCounts.prayer += 1;
                     durationMins = 50;
                 } else {
-                    durationMins = 30; // সাধারণ ব্যক্তিগত কাজ
+                    durationMins = 30; 
                 }
 
                 let expiryTime = new Date().getTime() + (durationMins * 60000);
@@ -976,7 +968,6 @@
                 queue = [];
             }
 
-            // টাইমার বা মেয়াদ শেষ হওয়া রাইডারদের সিরিয়াল থেকে অটো রিমুভ চেক
             const now = new Date().getTime();
             let queueChanged = false;
             queue = queue.filter(item => {
@@ -1015,8 +1006,9 @@
                 const timeElapsedStr = `${diffMins} মি ${diffSecs} সে`;
 
                 let noteBadge = item.statusNote ? `<span class="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold"><i class="fa-solid fa-triangle-exclamation"></i> ${item.statusNote}</span>` : '';
-                let distBadge = item.extraBonusDist ? `<span class="bg-indigo-100 text-indigo-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold">এক্সট্রা দূরত্ব: +${item.extraBonusDist}মি</span>` : '';
-                let timerBadge = (item.specialTimerExpiry && now < item.specialTimerExpiry) ? `<span class="bg-purple-100 text-purple-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold">স্পেশাল টাইমার সচল</span>` : '';
+                
+                // 🛑 এখানে এক্সট্রা দূরত্বের ব্যাজটি পাবলিক সিরিয়াল থেকে পুরোপুরি হাইড করা হয়েছে, কিন্তু বিরতির কারণ ও টাইমার দেখা যাচ্ছে
+                let timerBadge = (item.specialTimerExpiry && now < item.specialTimerExpiry && item.statusNote && item.statusNote.includes('বিরতি')) ? `<span class="bg-purple-100 text-purple-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold">স্পেশাল টাইমার সচল</span>` : '';
                 
                 let avatarHtml = item.photo 
                     ? `<img src="${item.photo}" class="w-9 h-9 rounded-full object-cover border border-green-600 shadow-sm">` 
@@ -1027,7 +1019,7 @@
                         <div class="flex items-center space-x-3">
                             ${avatarHtml}
                             <div>
-                                <h4 class="font-bold text-gray-800 text-xs">${index + 1}. ${item.name} ${index === 0 ? '<span class="bg-green-600 text-white text-[9px] px-1.5 py-0.5 rounded ml-1">পরবর্তী ট্রিপ</span>' : ''} ${noteBadge} ${distBadge} ${timerBadge}</h4>
+                                <h4 class="font-bold text-gray-800 text-xs">${index + 1}. ${item.name} ${index === 0 ? '<span class="bg-green-600 text-white text-[9px] px-1.5 py-0.5 rounded ml-1">পরবর্তী ট্রিপ</span>' : ''} ${noteBadge} ${timerBadge}</h4>
                                 <p class="text-[11px] text-gray-500">${item.phone}</p>
                             </div>
                         </div>
