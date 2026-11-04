@@ -23,7 +23,7 @@
                 <h1 class="text-lg font-bold">চন্দ্রিমা বাইকার একতা</h1>
                 <p class="text-xs text-green-200">ডিজিটাল অটোমেটিক স্ট্যান্ড ম্যানেজমেন্ট</p>
             </div>
-            <button onclick="toggleAdminModal()" class="bg-green-900 hover:bg-green-800 text-xs px-3 py-1.5 rounded-lg border border-green-500 cursor-pointer">
+            <button onclick="toggleAdminModal()" class="bg-green-900 hover:bg-green-800 text-xs px-3 py-1.5 rounded-lg border border-green-500 cursor-pointer transition">
                 <i class="fa-solid fa-lock mr-1"></i> এডমিন
             </button>
         </div>
@@ -65,19 +65,19 @@
                 <i class="fa-solid fa-bullhorn mr-2"></i> সমিতির নোটিশ বোর্ড
             </div>
             <p id="noticeText" class="text-xs text-amber-900 leading-relaxed">
-                স্ট্যান্ডের ৩০০ মিটারের মধ্যে প্রবেশ করলেই সিরিয়াল স্বয়ংক্রিয়ভাবে (অটো-জয়েন্ট) সক্রিয় হবে।
+                স্ট্যান্ডের ৩০০ মিটারের মধ্যে প্রবেশ করলেই সিরিয়াল স্বয়ংক্রিয়ভাবে (অটো-জয়েন্ট) সক্রিয় হবে। বিরতিতে যাওয়ার আগে কারণ মার্ক করা বাধ্যতামূলক।
             </p>
         </div>
 
         <!-- Navigation Tabs -->
         <div class="flex bg-white rounded-lg shadow-sm overflow-hidden text-sm border">
-            <button onclick="switchTab('queue')" id="tab-queue" class="flex-1 py-3 text-center active-tab">
+            <button onclick="switchTab('queue')" id="tab-queue" class="flex-1 py-3 text-center active-tab cursor-pointer">
                 <i class="fa-solid fa-list-ol mr-1"></i> লাইভ সিরিয়াল
             </button>
-            <button onclick="switchTab('driver')" id="tab-driver" class="flex-1 py-3 text-center text-gray-600 font-medium">
+            <button onclick="switchTab('driver')" id="tab-driver" class="flex-1 py-3 text-center text-gray-600 font-medium cursor-pointer">
                 <i class="fa-solid fa-id-card mr-1"></i> মাই প্রোফাইল
             </button>
-            <button onclick="switchTab('manual')" id="tab-manual" class="flex-1 py-3 text-center text-gray-600 font-medium">
+            <button onclick="switchTab('manual')" id="tab-manual" class="flex-1 py-3 text-center text-gray-600 font-medium cursor-pointer">
                 <i class="fa-solid fa-keyboard mr-1"></i> ম্যানুয়াল এন্ট্রি
             </button>
         </div>
@@ -143,11 +143,11 @@
                 <div id="breakSection" class="hidden pt-3 border-t space-y-2 text-xs">
                     <label class="block font-semibold text-gray-700">স্ট্যান্ড ছাড়ার কারণ (ব্রেক/বিরতি):</label>
                     <select id="leaveReason" class="w-full p-2 border rounded outline-none bg-white">
-                        <option value="খাবার বিরতি (৩০ মিনিট)">খাবার বিরতি (৩০ মিনিট)</option>
-                        <option value="নামাজের বিরতি">নামাজের বিরতি</option>
+                        <option value="খাবার বিরতি (৩০ মিনিট)">খাবার বিরতি (৩০ মিনিট) - দিনে ১ বার</option>
+                        <option value="নামাজের বিরতি (৫০ মিনিট)">নামাজের বিরতি (৫০ মিনিট) - দিনে ৩ বার</option>
                         <option value="জরুরী ব্যক্তিগত কাজ">জরুরী ব্যক্তিগত কাজ</option>
                     </select>
-                    <button onclick="markLeaveReason()" class="w-full bg-amber-600 hover:bg-amber-700 text-white p-2 rounded font-bold cursor-pointer">
+                    <button onclick="markLeaveReason()" class="w-full bg-amber-600 hover:bg-amber-700 text-white p-2 rounded font-bold cursor-pointer transition">
                         কারণ মার্ক করে স্ট্যান্ড ছাড়ুন
                     </button>
                 </div>
@@ -192,7 +192,7 @@
             <div id="adminLoginArea" class="space-y-2">
                 <label class="block font-semibold">এডমিন পিন নম্বর দিন</label>
                 <input type="password" id="adminPinInput" placeholder="পিন কোড দিন" class="w-full p-2 border rounded outline-none">
-                <button onclick="verifyAdmin()" class="w-full bg-green-700 hover:bg-green-800 text-white p-2 rounded font-bold cursor-pointer">লগইন</button>
+                <button onclick="verifyAdmin()" class="w-full bg-green-700 hover:bg-green-800 text-white p-2 rounded font-bold cursor-pointer transition">লগইন</button>
             </div>
             <div id="adminPanelControls" class="hidden space-y-3">
                 
@@ -214,7 +214,7 @@
                         <input type="text" id="adminOrgName" placeholder="সাংগঠনিক সম্পাদকের নাম" class="w-full p-1.5 border rounded mb-1 outline-none">
                         <input type="file" id="adminOrgPhoto" accept="image/*" class="w-full text-[10px]">
                     </div>
-                    <button onclick="updateCommittee()" class="w-full bg-green-700 text-white p-1.5 rounded font-bold text-[11px] cursor-pointer">কমিটি আপডেট করুন</button>
+                    <button onclick="updateCommittee()" class="w-full bg-green-700 hover:bg-green-800 text-white p-1.5 rounded font-bold text-[11px] cursor-pointer transition">কমিটি আপডেট করুন</button>
                 </div>
 
                 <!-- Registered Drivers Overview for Admin -->
@@ -223,7 +223,7 @@
                         <span><i class="fa-solid fa-users mr-1"></i> মোট রেজিস্টার্ড রাইডার:</span>
                         <span id="adminTotalRegisteredCount" class="bg-blue-600 text-white px-2 py-0.5 rounded-full">0 জন</span>
                     </div>
-                    <button onclick="toggleRegisteredDriversList()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded font-semibold text-[11px] cursor-pointer">
+                    <button onclick="toggleRegisteredDriversList()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded font-semibold text-[11px] cursor-pointer transition">
                         <i class="fa-solid fa-address-book mr-1"></i> রেজিস্টার্ড রাইডারদের তালিকা দেখুন/লুকান
                     </button>
                     <div id="registeredDriversContainer" class="hidden max-h-48 overflow-y-auto space-y-2 pt-2 border-t border-blue-200">
@@ -234,7 +234,7 @@
                 <div>
                     <label class="block font-semibold mb-1">নোটিশ বোর্ড আপডেট করুন</label>
                     <textarea id="adminNoticeInput" class="w-full p-2 border rounded outline-none h-14"></textarea>
-                    <button onclick="updateNotice()" class="mt-1 bg-amber-600 text-white px-3 py-1 rounded cursor-pointer">নোটিশ সেভ করুন</button>
+                    <button onclick="updateNotice()" class="mt-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded cursor-pointer transition">নোটিশ সেভ করুন</button>
                 </div>
 
                 <!-- Admin Control: Personal Distance & Special Timer Assignment -->
@@ -251,7 +251,7 @@
                         <label class="block text-[11px] text-gray-600 mb-0.5">স্পেশাল ছাড়ের সময় (মিনিট):</label>
                         <input type="number" id="adminSpecialMins" placeholder="যেমন: 60" class="w-full p-2 border rounded outline-none">
                     </div>
-                    <button onclick="applyAdminOverrides()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded font-bold cursor-pointer">
+                    <button onclick="applyAdminOverrides()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded font-bold cursor-pointer transition">
                         সেটিংস সেভ করুন
                     </button>
                 </div>
@@ -259,11 +259,11 @@
                 <div class="pt-2 border-t">
                     <label class="block font-semibold mb-1">এডমিন পিন পরিবর্তন করুন</label>
                     <input type="password" id="newAdminPin" placeholder="নতুন পিন দিন" class="w-full p-2 border rounded outline-none mb-1">
-                    <button onclick="changeAdminPin()" class="bg-blue-600 text-white px-3 py-1 rounded cursor-pointer">পিন পরিবর্তন করুন</button>
+                    <button onclick="changeAdminPin()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded cursor-pointer transition">পিন পরিবর্তন করুন</button>
                 </div>
                 <hr class="my-2">
                 <div>
-                    <button onclick="resetQueue()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2 rounded font-bold cursor-pointer">আজকের সম্পূর্ণ সিরিয়াল রিসেট করুন</button>
+                    <button onclick="resetQueue()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2 rounded font-bold cursor-pointer transition">আজকের সম্পূর্ণ সিরিয়াল রিসেট করুন</button>
                 </div>
             </div>
         </div>
@@ -271,10 +271,9 @@
 
     <!-- JavaScript Application Logic -->
     <script>
-        // অটো মেমোরি ও স্টোরেজ সেফটি ক্লিনার (Anti-Hang Memory Protection)
+        // অটো মেমোরি ও স্টোরেজ সেফটি ক্লিনার
         (function autoMemoryPurge() {
             try {
-                // অতিরিক্ত বা করাপ্ট ডেটা চেক করে ক্লিন করা
                 const q = localStorage.getItem('chandrima_queue');
                 if (q && q.length > 500000) { localStorage.removeItem('chandrima_queue'); }
             } catch (e) {
@@ -385,4 +384,681 @@
 
             const presFile = document.getElementById('adminPresPhoto').files[0];
             const vpFile = document.getElementById('adminVpPhoto').files[0];
-            const orgFile = document.
+            const orgFile = document.getElementById('adminOrgPhoto').files[0];
+
+            let pendingImages = 0;
+            const checkDone = () => {
+                pendingImages--;
+                if(pendingImages <= 0) {
+                    try {
+                        localStorage.setItem('chandrima_committee', JSON.stringify(committee));
+                    } catch(e) {}
+                    loadCommittee();
+                    alert('কমিটির তথ্য সফলভাবে আপডেট করা হয়েছে!');
+                    toggleAdminModal();
+                }
+            };
+
+            if(presFile) {
+                pendingImages++;
+                compressAndResizeImage(presFile, (base64) => { committee.presPhoto = base64; checkDone(); });
+            }
+            if(vpFile) {
+                pendingImages++;
+                compressAndResizeImage(vpFile, (base64) => { committee.vpPhoto = base64; checkDone(); });
+            }
+            if(orgFile) {
+                pendingImages++;
+                compressAndResizeImage(orgFile, (base64) => { committee.orgPhoto = base64; checkDone(); });
+            }
+
+            if(pendingImages === 0) {
+                try {
+                    localStorage.setItem('chandrima_committee', JSON.stringify(committee));
+                } catch(e) {}
+                loadCommittee();
+                alert('কমিটির তথ্য সফলভাবে আপডেট করা হয়েছে!');
+                toggleAdminModal();
+            }
+        }
+
+        function renderRegisteredDriversForAdmin() {
+            let registeredDrivers = [];
+            try {
+                registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
+            } catch (e) {
+                registeredDrivers = [];
+            }
+
+            const countEl = document.getElementById('adminTotalRegisteredCount');
+            const container = document.getElementById('registeredDriversContainer');
+
+            if(countEl) countEl.innerText = `${registeredDrivers.length} জন`;
+
+            if(container) {
+                if(registeredDrivers.length === 0) {
+                    container.innerHTML = `<p class="text-center text-gray-500 py-2 text-[11px]">এখনো কোনো রাইডার রেজিস্টার্ড হয়নি।</p>`;
+                    return;
+                }
+                let html = '';
+                registeredDrivers.forEach((d, idx) => {
+                    let photoSrc = d.photo || '';
+                    let avatar = photoSrc ? `<img src="${photoSrc}" class="w-7 h-7 rounded-full object-cover border border-blue-500">` : `<i class="fa-solid fa-user-circle text-gray-400 text-lg"></i>`;
+                    html += `
+                        <div class="flex items-center justify-between bg-white p-2 rounded shadow-sm border border-gray-200">
+                            <div class="flex items-center space-x-2">
+                                ${avatar}
+                                <div>
+                                    <p class="font-bold text-gray-800 text-[11px]">${idx + 1}. ${d.name}</p>
+                                    <p class="text-[10px] text-gray-500">${d.phone}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+            }
+        }
+
+        function toggleRegisteredDriversList() {
+            const container = document.getElementById('registeredDriversContainer');
+            if(container) container.classList.toggle('hidden');
+        }
+
+        function populateAdminDriverDropdown() {
+            const selectTarget = document.getElementById('adminTargetPhone');
+            let registeredDrivers = [];
+            try {
+                registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
+            } catch (e) {
+                registeredDrivers = [];
+            }
+            let html = '<option value="">রাইডার নির্বাচন করুন</option>';
+            registeredDrivers.forEach(d => {
+                html += `<option value="${d.phone}">${d.name} (${d.phone})</option>`;
+            });
+            if(selectTarget) selectTarget.innerHTML = html;
+        }
+
+        function applyAdminOverrides() {
+            const phone = document.getElementById('adminTargetPhone').value;
+            const extraInput = document.getElementById('adminExtraDist').value;
+            const minsInput = document.getElementById('adminSpecialMins').value;
+
+            if(!phone) {
+                alert('দয়া করে একজন রাইডার সিলেক্ট করুন!');
+                return;
+            }
+
+            let queue = [];
+            try {
+                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            } catch (e) {
+                queue = [];
+            }
+            
+            // সিরিয়ালে না থাকলেও রেজিস্টার্ড রাইডারদের ডাটা আপডেট হবে যাতে পরবর্তী অটো-জয়েন্টে কাজ করে
+            let registeredDrivers = [];
+            try {
+                registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
+            } catch (e) {}
+
+            let driverInReg = registeredDrivers.find(d => d.phone === phone);
+            let driverInQ = queue.find(q => q.phone === phone);
+            
+            let extraDist = extraInput !== "" ? parseInt(extraInput) || 0 : 0;
+            let specialExpiry = minsInput !== "" ? new Date().getTime() + ((parseInt(minsInput) || 0) * 60000) : 0;
+
+            if (driverInReg) {
+                driverInReg.extraBonusDist = extraDist;
+                driverInReg.specialTimerExpiry = specialExpiry;
+                try {
+                    localStorage.setItem('chandrima_registered_drivers', JSON.stringify(registeredDrivers));
+                } catch(e) {}
+            }
+
+            if(driverInQ) {
+                driverInQ.extraBonusDist = extraDist;
+                driverInQ.specialTimerExpiry = specialExpiry;
+                try {
+                    localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+                } catch(e) {}
+            }
+
+            alert(`রাইডার-এর জন্য পার্সোনাল দূরত্ব ও স্পেশাল সময় সফলভাবে সেট করা হয়েছে!`);
+            loadQueueData();
+            toggleAdminModal();
+        }
+
+        function changeAdminPin() {
+            const pinField = document.getElementById('newAdminPin');
+            if(!pinField) return;
+            const newPin = pinField.value.trim();
+            if (newPin.length >= 4) {
+                try {
+                    localStorage.setItem('chandrima_admin_pin', newPin);
+                } catch(e) {}
+                alert('এডমিন পিন সফলভাবে পরিবর্তন করা হয়েছে!');
+                pinField.value = '';
+            } else {
+                alert('কমপক্ষে ৪ সংখ্যার পিন দিন!');
+            }
+        }
+
+        function updateNotice() {
+            const noticeField = document.getElementById('adminNoticeInput');
+            if(!noticeField) return;
+            const newNotice = noticeField.value.trim();
+            if (newNotice) {
+                try {
+                    localStorage.setItem('chandrima_notice', newNotice);
+                } catch(e) {}
+                const noticeText = document.getElementById('noticeText');
+                if(noticeText) noticeText.innerText = newNotice;
+                alert('নোটিশ সফলভাবে আপডেট হয়েছে!');
+                toggleAdminModal();
+            }
+        }
+
+        function loadNotice() {
+            let notice = null;
+            try {
+                notice = localStorage.getItem('chandrima_notice');
+            } catch(e) { notice = null; }
+            const noticeText = document.getElementById('noticeText');
+            if (notice && noticeText) {
+                noticeText.innerText = notice;
+            }
+        }
+
+        function compressAndResizeImage(file, callback) {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = function (event) {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = function () {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 80;
+                    const MAX_HEIGHT = 80;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    callback(canvas.toDataURL('image/jpeg', 0.5));
+                }
+            }
+        }
+
+        function handleRegistration(e) {
+            e.preventDefault();
+            const name = document.getElementById('regName').value.trim();
+            const phone = document.getElementById('regPhone').value.trim();
+            const photoInput = document.getElementById('regPhoto');
+
+            if (!photoInput.files || !photoInput.files[0]) {
+                alert('ছবি আপলোড করা বাধ্যতামূলক!');
+                return;
+            }
+
+            compressAndResizeImage(photoInput.files[0], function(photoBase64) {
+                let registeredDrivers = [];
+                try {
+                    registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
+                } catch (e) {
+                    registeredDrivers = [];
+                }
+
+                let existingPhone = registeredDrivers.find(d => d.phone === phone);
+                if (existingPhone) {
+                    alert('এই মোবাইল নম্বর দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট রেজিস্টার করা আছে!');
+                    return;
+                }
+
+                currentUser = { 
+                    name, 
+                    phone, 
+                    photo: photoBase64, 
+                    extraBonusDist: 0, 
+                    specialTimerExpiry: 0, 
+                    breakCounts: { food: 0, prayer: 0 },
+                    lastBreakDate: new Date().toDateString()
+                };
+                registeredDrivers.push(currentUser);
+
+                try {
+                    localStorage.setItem('chandrima_registered_drivers', JSON.stringify(registeredDrivers));
+                    localStorage.setItem('chandrima_driver', JSON.stringify(currentUser));
+                } catch (err) {
+                    alert('স্টোরেজ ফুল হয়ে গেছে! দয়া করে ছোট সাইজের ছবি দিন।');
+                    return;
+                }
+                
+                checkLoginState();
+                startLocationTracking();
+                alert('সফলভাবে রেজিস্ট্রেশন সম্পন্ন হয়েছে!');
+            });
+        }
+
+        function logoutDriver() {
+            currentUser = null;
+            try {
+                localStorage.removeItem('chandrima_driver');
+            } catch(e) {}
+            checkLoginState();
+        }
+
+        function checkLoginState() {
+            const regBox = document.getElementById('registrationBox');
+            const statusBox = document.getElementById('driverStatusBox');
+
+            if (currentUser) {
+                if(regBox) regBox.classList.add('hidden');
+                if(statusBox) statusBox.classList.remove('hidden');
+                const pName = document.getElementById('profileName');
+                const pPhone = document.getElementById('profilePhone');
+                const pImg = document.getElementById('profileImg');
+                if(pName) pName.innerText = currentUser.name;
+                if(pPhone) pPhone.innerText = currentUser.phone;
+                if(pImg && currentUser.photo) pImg.src = currentUser.photo;
+            } else {
+                if(regBox) regBox.classList.remove('hidden');
+                if(statusBox) statusBox.classList.add('hidden');
+            }
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return Math.round(R * c);
+        }
+
+        function startLocationTracking() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.watchPosition((pos) => {
+                    const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, STAND_LAT, STAND_LNG);
+                    
+                    let effectiveRadius = BASE_RADIUS;
+                    let hasSpecialTimerActive = false;
+
+                    if (currentUser) {
+                        let queue = [];
+                        let registeredDrivers = [];
+                        try {
+                            queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+                            registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
+                        } catch (e) {}
+
+                        // বর্তমান ব্যবহারকারীর আপডেট ডেটা রেজিস্টার্ড লিস্ট বা কিউ থেকে ফেচ করা
+                        let regUser = registeredDrivers.find(d => d.phone === currentUser.phone);
+                        if(regUser) {
+                            currentUser.extraBonusDist = regUser.extraBonusDist || 0;
+                            currentUser.specialTimerExpiry = regUser.specialTimerExpiry || 0;
+                        }
+
+                        let driverInQ = queue.find(q => q.phone === currentUser.phone);
+                        
+                        if (currentUser.extraBonusDist) {
+                            effectiveRadius = BASE_RADIUS + currentUser.extraBonusDist;
+                        }
+
+                        const nowTime = new Date().getTime();
+                        if (currentUser.specialTimerExpiry && nowTime < currentUser.specialTimerExpiry) {
+                            hasSpecialTimerActive = true;
+                        } else if (currentUser.specialTimerExpiry && nowTime >= currentUser.specialTimerExpiry && driverInQ && driverInQ.statusNote && driverInQ.statusNote.includes('বিরতি')) {
+                            // ব্রেক বা স্পেশাল সময় শেষ হয়ে গেলে অটো সিরিয়াল রিমুভ
+                            queue = queue.filter(q => q.phone !== currentUser.phone);
+                            try {
+                                localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+                            } catch(e) {}
+                            alert('আপনার বিরতি বা স্পেশাল সময়ের মেয়াদ শেষ হয়ে যাওয়ায় সিরিয়াল থেকে বাদ দেওয়া হয়েছে।');
+                            loadQueueData();
+                        }
+
+                        let isInQueue = queue.some(q => q.phone === currentUser.phone);
+                        let canBeInQueue = (dist <= effectiveRadius) || hasSpecialTimerActive;
+
+                        if (canBeInQueue && !isInQueue) {
+                            queue.push({ 
+                                ...currentUser, 
+                                startTime: new Date().getTime(), 
+                                timeStr: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                                statusNote: 'অটো-জয়েন্ট'
+                            });
+                            try {
+                                localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+                            } catch(e) {}
+                            loadQueueData();
+                        } else if (!canBeInQueue && isInQueue) {
+                            let driverObj = queue.find(q => q.phone === currentUser.phone);
+                            // যদি কোনো ব্রেক বা কারণ সেট করা না থাকে, তবেই দূরত্ব অতিক্রম করলে অটো রিমুভ হবে
+                            if (driverObj && (!driverObj.statusNote || driverObj.statusNote === 'অটো-জয়েন্ট' || driverObj.statusNote === 'ম্যানুয়াল')) {
+                                queue = queue.filter(q => q.phone !== currentUser.phone);
+                                try {
+                                    localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+                                } catch(e) {}
+                                loadQueueData();
+                            }
+                        }
+                    }
+
+                    isWithinCurrentStand = (dist <= effectiveRadius) || hasSpecialTimerActive;
+
+                    const distElement = document.getElementById('profileDistance');
+                    if(distElement && currentUser) {
+                        let timerText = hasSpecialTimerActive ? " (স্পেশাল টাইমার সচল)" : "";
+                        distElement.innerText = `${dist} মিটার (সর্বোচ্চ সীমা: ${effectiveRadius}মি.)${timerText}`;
+                        renderDriverActions(isWithinCurrentStand, dist, effectiveRadius, hasSpecialTimerActive);
+                    }
+
+                    const manualMsg = document.getElementById('manualPermissionMsg');
+                    const manualForm = document.getElementById('manualFormArea');
+                    if(manualMsg && manualForm) {
+                        if(dist <= BASE_RADIUS) {
+                            manualMsg.classList.add('hidden');
+                            manualForm.classList.remove('hidden');
+                        } else {
+                            manualMsg.classList.remove('hidden');
+                            manualMsg.innerText = `আপনি স্ট্যান্ডের ৩০০ মিটারের বাইরে আছেন (${dist} মি.)। ম্যানুয়াল এন্ট্রি করতে হলে ৩০০ মিটারের মধ্যে আসতে হবে।`;
+                            manualForm.classList.add('hidden');
+                        }
+                    }
+
+                }, (err) => {
+                    const distElement = document.getElementById('profileDistance');
+                    if(distElement) distElement.innerText = 'জিপিএস অন করুন';
+                }, { enableHighAccuracy: true });
+            }
+        }
+
+        function renderDriverActions(isWithinStand, dist, effectiveRadius, hasSpecialTimerActive) {
+            if (!currentUser) return;
+            const actionArea = document.getElementById('standActionArea');
+            const breakSection = document.getElementById('breakSection');
+            let queue = [];
+            try {
+                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            } catch (e) {
+                queue = [];
+            }
+            let inQueue = queue.some(q => q.phone === currentUser.phone);
+
+            if (inQueue) {
+                if(actionArea) actionArea.innerHTML = `
+                    <div class="p-2.5 bg-blue-50 text-blue-800 text-center rounded mb-2 font-bold text-xs"><i class="fa-solid fa-circle-check"></i> আপনি অটোমেটিক সিরিয়ালে আছেন!</div>
+                    <button onclick="completeTrip()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2.5 rounded font-bold text-xs cursor-pointer transition">আমার ট্রিপ শেষ / সিরিয়াল কাটুন</button>
+                `;
+                if(breakSection) breakSection.classList.remove('hidden');
+            } else {
+                if(actionArea) actionArea.innerHTML = `
+                    <div class="p-2 bg-amber-50 text-amber-800 text-center rounded text-xs">স্ট্যান্ডের ৩০০ মিটারের মধ্যে প্রবেশ করলেই অটো সিরিয়ালে যুক্ত হবেন। (বর্তমান দূরত্ব: ${dist}মি.)</div>
+                `;
+                if(breakSection) breakSection.classList.add('hidden');
+            }
+        }
+
+        function markLeaveReason() {
+            if (!currentUser) return;
+            const reasonSel = document.getElementById('leaveReason');
+            if(!reasonSel) return;
+            const reasonText = reasonSel.value;
+
+            let queue = [];
+            let registeredDrivers = [];
+            try {
+                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+                registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
+            } catch (e) {}
+
+            let driverInReg = registeredDrivers.find(d => d.phone === currentUser.phone);
+            const todayStr = new Date().toDateString();
+
+            if(driverInReg) {
+                if(!driverInReg.breakCounts || driverInReg.lastBreakDate !== todayStr) {
+                    driverInReg.breakCounts = { food: 0, prayer: 0 };
+                    driverInReg.lastBreakDate = todayStr;
+                }
+
+                let durationMins = 0;
+                if(reasonText.includes('খাবার')) {
+                    if(driverInReg.breakCounts.food >= 1) {
+                        alert('আজকে আপনার খাবারের বিরতির কোটা (১ বার) শেষ হয়ে গেছে!');
+                        return;
+                    }
+                    driverInReg.breakCounts.food += 1;
+                    durationMins = 30;
+                } else if(reasonText.includes('নামাজ')) {
+                    if(driverInReg.breakCounts.prayer >= 3) {
+                        alert('আজকে আপনার নামাজের বিরতির কোটা (৩ বার) শেষ হয়ে গেছে!');
+                        return;
+                    }
+                    driverInReg.breakCounts.prayer += 1;
+                    durationMins = 50;
+                } else {
+                    durationMins = 30; // সাধারণ ব্যক্তিগত কাজ
+                }
+
+                let expiryTime = new Date().getTime() + (durationMins * 60000);
+                driverInReg.specialTimerExpiry = expiryTime;
+
+                try {
+                    localStorage.setItem('chandrima_registered_drivers', JSON.stringify(registeredDrivers));
+                } catch(e) {}
+
+                let driverInQ = queue.find(q => q.phone === currentUser.phone);
+                if (driverInQ) {
+                    driverInQ.statusNote = reasonText;
+                    driverInQ.specialTimerExpiry = expiryTime;
+                    try {
+                        localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+                    } catch(e) {}
+                }
+
+                alert(`আপনার কারণ "${reasonText}" সফলভাবে মার্ক করা হয়েছে। আপনাকে ${durationMins} মিনিটের স্পেশাল সময় দেওয়া হলো।`);
+                loadQueueData();
+                const breakSec = document.getElementById('breakSection');
+                if(breakSec) breakSec.classList.add('hidden');
+            }
+        }
+
+        function completeTrip() {
+            if (!currentUser) return;
+            let queue = [];
+            try {
+                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            } catch (e) {
+                queue = [];
+            }
+            queue = queue.filter(q => q.phone !== currentUser.phone);
+            try {
+                localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+            } catch(e) {}
+            alert('আপনার ট্রিপ সম্পন্ন হয়েছে!');
+            loadQueueData();
+        }
+
+        function submitManualEntry() {
+            const nameEl = document.getElementById('manualNameInput');
+            const phoneEl = document.getElementById('manualPhoneInput');
+            const photoInput = document.getElementById('manualPhotoInput');
+            if(!nameEl || !phoneEl) return;
+
+            const name = nameEl.value.trim();
+            const phone = phoneEl.value.trim();
+
+            if (!name || !phone) {
+                alert('দয়া করে নাম ও মোবাইল নম্বর দিন!');
+                return;
+            }
+
+            const processQueueAdd = (photoBase64 = '') => {
+                let queue = [];
+                try {
+                    queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+                } catch (e) {
+                    queue = [];
+                }
+                if (!queue.some(q => q.phone === phone)) {
+                    queue.push({ 
+                        name, 
+                        phone, 
+                        photo: photoBase64,
+                        startTime: new Date().getTime(),
+                        timeStr: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                        statusNote: 'ম্যানুয়াল',
+                        extraBonusDist: 0,
+                        specialTimerExpiry: 0
+                    });
+                    try {
+                        localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+                    } catch(e) {}
+                    alert(`${name}-কে সফলভাবে সিরিয়ালে যুক্ত করা হয়েছে!`);
+                    
+                    nameEl.value = '';
+                    phoneEl.value = '';
+                    if(photoInput) photoInput.value = '';
+
+                    loadQueueData();
+                    switchTab('queue');
+                } else {
+                    alert('এই রাইডার ইতিমধ্যে সিরিয়ালে আছেন!');
+                }
+            };
+
+            if (photoInput && photoInput.files && photoInput.files[0]) {
+                compressAndResizeImage(photoInput.files[0], function(base64) {
+                    processQueueAdd(base64);
+                });
+            } else {
+                processQueueAdd('');
+            }
+        }
+
+        function resetQueue() {
+            if (confirm('আজকের সমস্ত সিরিয়াল রিসেট করতে চান?')) {
+                try {
+                    localStorage.removeItem('chandrima_queue');
+                } catch(e) {}
+                loadQueueData();
+                toggleAdminModal();
+                alert('সিরিয়াল সফলভাবে রিসেট করা হয়েছে!');
+            }
+        }
+
+        function loadQueueData() {
+            let queue = [];
+            try {
+                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            } catch (e) {
+                queue = [];
+            }
+
+            // টাইমার বা মেয়াদ শেষ হওয়া রাইডারদের সিরিয়াল থেকে অটো রিমুভ চেক
+            const now = new Date().getTime();
+            let queueChanged = false;
+            queue = queue.filter(item => {
+                if (item.specialTimerExpiry && now >= item.specialTimerExpiry && item.statusNote && item.statusNote.includes('বিরতি')) {
+                    queueChanged = true;
+                    return false;
+                }
+                return true;
+            });
+
+            if(queueChanged) {
+                try {
+                    localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+                } catch(e) {}
+            }
+
+            const container = document.getElementById('queueListContainer');
+            if(!container) return;
+
+            const totalQ = document.getElementById('totalInQueue');
+            const totalS = document.getElementById('totalInStand');
+            if(totalQ) totalQ.innerText = queue.length;
+            if(totalS) totalS.innerText = queue.length;
+
+            if (queue.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-gray-400 text-sm">বর্তমানে লাইভ সিরিয়ালে কোনো বাইক নেই।</div>`;
+                return;
+            }
+
+            let html = '';
+
+            queue.forEach((item, index) => {
+                const diffMs = now - (item.startTime || now);
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffSecs = Math.floor((diffMs % 60000) / 1000);
+                const timeElapsedStr = `${diffMins} মি ${diffSecs} সে`;
+
+                let noteBadge = item.statusNote ? `<span class="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold"><i class="fa-solid fa-triangle-exclamation"></i> ${item.statusNote}</span>` : '';
+                let distBadge = item.extraBonusDist ? `<span class="bg-indigo-100 text-indigo-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold">এক্সট্রা দূরত্ব: +${item.extraBonusDist}মি</span>` : '';
+                let timerBadge = (item.specialTimerExpiry && now < item.specialTimerExpiry) ? `<span class="bg-purple-100 text-purple-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold">স্পেশাল টাইমার সচল</span>` : '';
+                
+                let avatarHtml = item.photo 
+                    ? `<img src="${item.photo}" class="w-9 h-9 rounded-full object-cover border border-green-600 shadow-sm">` 
+                    : `<span class="w-9 h-9 flex items-center justify-center bg-gray-800 text-white font-bold rounded-full text-xs">${index + 1}</span>`;
+
+                html += `
+                    <div class="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between border-l-4 ${index === 0 ? 'border-green-600 bg-green-50/30' : 'border-gray-300'}">
+                        <div class="flex items-center space-x-3">
+                            ${avatarHtml}
+                            <div>
+                                <h4 class="font-bold text-gray-800 text-xs">${index + 1}. ${item.name} ${index === 0 ? '<span class="bg-green-600 text-white text-[9px] px-1.5 py-0.5 rounded ml-1">পরবর্তী ট্রিপ</span>' : ''} ${noteBadge} ${distBadge} ${timerBadge}</h4>
+                                <p class="text-[11px] text-gray-500">${item.phone}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="block text-[10px] font-bold text-blue-600" id="timer-${index}">${timeElapsedStr}</span>
+                            <span class="text-[9px] text-gray-400">যোগ: ${item.timeStr || ''}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function updateQueueTimers() {
+            let queue = [];
+            try {
+                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            } catch (e) {
+                queue = [];
+            }
+            const now = new Date().getTime();
+            queue.forEach((item, index) => {
+                const timerEl = document.getElementById(`timer-${index}`);
+                if (timerEl) {
+                    const diffMs = now - (item.startTime || now);
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffSecs = Math.floor((diffMs % 60000) / 1000);
+                    timerEl.innerText = `${diffMins} মি ${diffSecs} সে`;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
