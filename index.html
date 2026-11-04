@@ -38,7 +38,7 @@
                 <i class="fa-solid fa-bullhorn mr-2"></i> সমিতির নোটিশ বোর্ড
             </div>
             <p id="noticeText" class="text-xs text-amber-900 leading-relaxed">
-                সকল রাইডারদের অবগতির জন্য জানানো যাচ্ছে যে, ৩০০ মিটারের মধ্যে থাকলে সিরিয়াল সক্রিয় থাকবে।
+                সকল রাইডারদের অবগতির জন্য জানানো যাচ্ছে যে, নির্দিষ্ট দূরত্বের মধ্যে থাকলে সিরিয়াল সক্রিয় থাকবে।
             </p>
         </div>
 
@@ -159,7 +159,8 @@
             </div>
             <div id="adminLoginArea" class="space-y-2">
                 <label class="block font-semibold">এডমিন পিন নম্বর দিন</label>
-                <input type="password" id="adminPinInput" placeholder="পিন কোড দিন (ডিফল্ট: 1234)" class="w-full p-2 border rounded outline-none">
+                <!-- পাসওয়ার্ড বক্স ফাঁকা রাখা হয়েছে -->
+                <input type="password" id="adminPinInput" placeholder="পিন কোড দিন" class="w-full p-2 border rounded outline-none">
                 <button onclick="verifyAdmin()" class="w-full bg-green-700 hover:bg-green-800 text-white p-2 rounded font-bold cursor-pointer">লগইন</button>
             </div>
             <div id="adminPanelControls" class="hidden space-y-3">
@@ -169,24 +170,14 @@
                     <button onclick="updateNotice()" class="mt-1 bg-amber-600 text-white px-3 py-1 rounded cursor-pointer">নোটিশ সেভ করুন</button>
                 </div>
 
-                <!-- NEW: Personal Bonus Distance for Specific Rider -->
+                <!-- Personal Bonus Distance for Specific Rider -->
                 <div class="pt-2 border-t">
-                    <label class="block font-semibold mb-1">নির্দিষ্ট রাইডারকে অতিরিক্ত দূরত্ব (মিটার) ছাড় দিন</label>
+                    <label class="block font-semibold mb-1">নির্দিষ্ট রাইডারকে অতিরিক্ত দূরত্ব (মিটার/কমি) ছাড় দিন</label>
                     <select id="adminDistPhone" class="w-full p-2 border rounded outline-none mb-1 bg-white">
                         <option value="">রাইডার নির্বাচন করুন</option>
                     </select>
-                    <input type="number" id="adminExtraDist" placeholder="অতিরিক্ত মিটার (যেমন: 200)" class="w-full p-2 border rounded outline-none mb-1">
+                    <input type="number" id="adminExtraDist" placeholder="অতিরিক্ত মিটার (যেমন: 1000 বা 2000)" class="w-full p-2 border rounded outline-none mb-1">
                     <button onclick="giveBonusDistance()" class="bg-indigo-600 text-white px-3 py-1 rounded cursor-pointer">দূরত্ব ছাড় বাড়িয়ে দিন</button>
-                </div>
-
-                <!-- Existing: Extra Time / Bonus Time for Riders -->
-                <div class="pt-2 border-t">
-                    <label class="block font-semibold mb-1">রাইডারকে অতিরিক্ত সময় দিন (মিনিট)</label>
-                    <select id="adminBonusPhone" class="w-full p-2 border rounded outline-none mb-1 bg-white">
-                        <option value="">রাইডার নির্বাচন করুন</option>
-                    </select>
-                    <input type="number" id="adminBonusMins" placeholder="অতিরিক্ত মিনিট (যেমন: 10)" class="w-full p-2 border rounded outline-none mb-1">
-                    <button onclick="giveBonusTime()" class="bg-purple-600 text-white px-3 py-1 rounded cursor-pointer">সময় বাড়িয়ে দিন</button>
                 </div>
 
                 <div class="pt-2 border-t">
@@ -267,14 +258,12 @@
         }
 
         function populateAdminDriverDropdowns() {
-            const selectTime = document.getElementById('adminBonusPhone');
             const selectDist = document.getElementById('adminDistPhone');
             let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
             let html = '<option value="">রাইডার নির্বাচন করুন</option>';
             queue.forEach(q => {
                 html += `<option value="${q.phone}">${q.name} (${q.bike})</option>`;
             });
-            if(selectTime) selectTime.innerHTML = html;
             if(selectDist) selectDist.innerHTML = html;
         }
 
@@ -291,32 +280,9 @@
             let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
             let driver = queue.find(q => q.phone === phone);
             if(driver) {
-                driver.extraBonusDist = extraMeters; // পার্সোনাল অতিরিক্ত দূরত্ব যোগ হলো
+                driver.extraBonusDist = extraMeters; 
                 localStorage.setItem('chandrima_queue', JSON.stringify(queue));
                 alert(`${driver.name}-কে আরও ${extraMeters} মিটার অতিরিক্ত দূরত্বের ছাড় দেওয়া হয়েছে!`);
-                toggleAdminModal();
-            } else {
-                alert('রাইডারকে সিরয়ালে পাওয়া যায়নি!');
-            }
-        }
-
-        function giveBonusTime() {
-            const phone = document.getElementById('adminBonusPhone').value;
-            const minsInput = document.getElementById('adminBonusMins').value;
-            const bonusMins = parseInt(minsInput);
-
-            if(!phone || !bonusMins) {
-                alert('রাইডার সিলেক্ট করুন এবং অতিরিক্ত মিনিট লিখুন!');
-                return;
-            }
-
-            let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
-            let driver = queue.find(q => q.phone === phone);
-            if(driver) {
-                driver.startTime = (driver.startTime || new Date().getTime()) - (bonusMins * 60000);
-                localStorage.setItem('chandrima_queue', JSON.stringify(queue));
-                alert(`${driver.name}-কে ${bonusMins} মিনিট অতিরিক্ত সময় দেওয়া হয়েছে!`);
-                loadQueueData();
                 toggleAdminModal();
             } else {
                 alert('রাইডারকে সিরয়ালে পাওয়া যায়নি!');
@@ -414,7 +380,6 @@
                 navigator.geolocation.watchPosition((pos) => {
                     const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, STAND_LAT, STAND_LNG);
                     
-                    // চেক করা যাক এই রাইডার সিরয়ালে আছেন কি না এবং এডমিন তাকে কোনো পার্সোনাল এক্সট্রা দূরত্ব ছাড় দিয়েছেন কি না
                     let effectiveRadius = BASE_RADIUS;
                     if (currentUser) {
                         let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
@@ -632,7 +597,7 @@
         function updateQueueTimers() {
             let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
             const now = new Date().getTime();
-            queue.queueTimers = queue.forEach((item, index) => {
+            queue.forEach((item, index) => {
                 const timerEl = document.getElementById(`timer-${index}`);
                 if (timerEl) {
                     const diffMs = now - (item.startTime || now);
