@@ -159,7 +159,6 @@
             </div>
             <div id="adminLoginArea" class="space-y-2">
                 <label class="block font-semibold">এডমিন পিন নম্বর দিন</label>
-                <!-- পাসওয়ার্ড বক্স ফাঁকা রাখা হয়েছে -->
                 <input type="password" id="adminPinInput" placeholder="পিন কোড দিন" class="w-full p-2 border rounded outline-none">
                 <button onclick="verifyAdmin()" class="w-full bg-green-700 hover:bg-green-800 text-white p-2 rounded font-bold cursor-pointer">লগইন</button>
             </div>
@@ -170,14 +169,23 @@
                     <button onclick="updateNotice()" class="mt-1 bg-amber-600 text-white px-3 py-1 rounded cursor-pointer">নোটিশ সেভ করুন</button>
                 </div>
 
-                <!-- Personal Bonus Distance for Specific Rider -->
-                <div class="pt-2 border-t">
-                    <label class="block font-semibold mb-1">নির্দিষ্ট রাইডারকে অতিরিক্ত দূরত্ব (মিটার/কমি) ছাড় দিন</label>
-                    <select id="adminDistPhone" class="w-full p-2 border rounded outline-none mb-1 bg-white">
+                <!-- Admin Control: Personal Distance & Special Timer Assignment -->
+                <div class="pt-2 border-t space-y-2">
+                    <label class="block font-semibold text-gray-700">রাইডারকে পার্সোনাল দূরত্ব ও স্পেশাল সময় ছাড় দিন</label>
+                    <select id="adminTargetPhone" class="w-full p-2 border rounded outline-none bg-white">
                         <option value="">রাইডার নির্বাচন করুন</option>
                     </select>
-                    <input type="number" id="adminExtraDist" placeholder="অতিরিক্ত মিটার (যেমন: 1000 বা 2000)" class="w-full p-2 border rounded outline-none mb-1">
-                    <button onclick="giveBonusDistance()" class="bg-indigo-600 text-white px-3 py-1 rounded cursor-pointer">দূরত্ব ছাড় বাড়িয়ে দিন</button>
+                    <div>
+                        <label class="block text-[11px] text-gray-600 mb-0.5">অতিরিক্ত দূরত্ব (মিটার/কমি, যেমন: 1000 বা 5000):</label>
+                        <input type="number" id="adminExtraDist" placeholder="যেমন: 2000" class="w-full p-2 border rounded outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-gray-600 mb-0.5">স্পেশাল ছাড়ের সময় (মিনিট):</label>
+                        <input type="number" id="adminSpecialMins" placeholder="যেমন: 60" class="w-full p-2 border rounded outline-none">
+                    </div>
+                    <button onclick="applyAdminOverrides()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded font-bold cursor-pointer">
+                        সেটিংস সেভ করুন
+                    </button>
                 </div>
 
                 <div class="pt-2 border-t">
@@ -197,7 +205,7 @@
     <script>
         const STAND_LAT = 23.7588; 
         const STAND_LNG = 90.3544;
-        const BASE_RADIUS = 300; // সাধারণ স্ট্যান্ড রেঞ্জ ৩০০ মিটার
+        const BASE_RADIUS = 300; // স্ট্যান্ডার্ড বেস রেঞ্জ ৩০০ মিটার
 
         let currentUser = JSON.parse(localStorage.getItem('chandrima_driver')) || null;
         let isAdminLoggedIn = false;
@@ -235,7 +243,7 @@
             if(modal) {
                 modal.classList.toggle('hidden');
                 if(!modal.classList.contains('hidden') && isAdminLoggedIn) {
-                    populateAdminDriverDropdowns();
+                    populateAdminDriverDropdown();
                 }
             }
         }
@@ -251,38 +259,46 @@
                 const controls = document.getElementById('adminPanelControls');
                 if(loginArea) loginArea.classList.add('hidden');
                 if(controls) controls.classList.remove('hidden');
-                populateAdminDriverDropdowns();
+                populateAdminDriverDropdown();
             } else {
                 alert('ভুল পিন কোড! সঠিক পিন দিন।');
             }
         }
 
-        function populateAdminDriverDropdowns() {
-            const selectDist = document.getElementById('adminDistPhone');
+        function populateAdminDriverDropdown() {
+            const selectTarget = document.getElementById('adminTargetPhone');
             let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
             let html = '<option value="">রাইডার নির্বাচন করুন</option>';
             queue.forEach(q => {
                 html += `<option value="${q.phone}">${q.name} (${q.bike})</option>`;
             });
-            if(selectDist) selectDist.innerHTML = html;
+            if(selectTarget) selectTarget.innerHTML = html;
         }
 
-        function giveBonusDistance() {
-            const phone = document.getElementById('adminDistPhone').value;
+        function applyAdminOverrides() {
+            const phone = document.getElementById('adminTargetPhone').value;
             const extraInput = document.getElementById('adminExtraDist').value;
-            const extraMeters = parseInt(extraInput);
+            const minsInput = document.getElementById('adminSpecialMins').value;
 
-            if(!phone || isNaN(extraMeters)) {
-                alert('রাইডার নির্বাচন করুন এবং অতিরিক্ত মিটার লিখুন!');
+            if(!phone) {
+                alert('দয়া করে একজন রাইডার সিলেক্ট করুন!');
                 return;
             }
 
             let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
             let driver = queue.find(q => q.phone === phone);
+            
             if(driver) {
-                driver.extraBonusDist = extraMeters; 
+                if(extraInput !== "") {
+                    driver.extraBonusDist = parseInt(extraInput) || 0;
+                }
+                if(minsInput !== "") {
+                    const mins = parseInt(minsInput) || 0;
+                    driver.specialTimerExpiry = new Date().getTime() + (mins * 60000);
+                }
                 localStorage.setItem('chandrima_queue', JSON.stringify(queue));
-                alert(`${driver.name}-কে আরও ${extraMeters} মিটার অতিরিক্ত দূরত্বের ছাড় দেওয়া হয়েছে!`);
+                alert(`${driver.name}-এর জন্য পার্সোনাল দূরত্ব ও স্পেশাল সময় সফলভাবে আপডেট করা হয়েছে!`);
+                loadQueueData();
                 toggleAdminModal();
             } else {
                 alert('রাইডারকে সিরয়ালে পাওয়া যায়নি!');
@@ -381,20 +397,29 @@
                     const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, STAND_LAT, STAND_LNG);
                     
                     let effectiveRadius = BASE_RADIUS;
+                    let hasSpecialTimerActive = false;
+
                     if (currentUser) {
                         let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
                         let driverInQ = queue.find(q => q.phone === currentUser.phone);
-                        if (driverInQ && driverInQ.extraBonusDist) {
-                            effectiveRadius = BASE_RADIUS + driverInQ.extraBonusDist;
+                        if (driverInQ) {
+                            if (driverInQ.extraBonusDist) {
+                                effectiveRadius = BASE_RADIUS + driverInQ.extraBonusDist;
+                            }
+                            if (driverInQ.specialTimerExpiry && new Date().getTime() < driverInQ.specialTimerExpiry) {
+                                hasSpecialTimerActive = true;
+                            }
                         }
                     }
 
-                    isWithinCurrentStand = dist <= effectiveRadius;
+                    // যদি স্পেশাল টাইমার চালু থাকে অথবা কার্যকর দূরত্বের মধ্যে থাকে, তবে অটো রিমুভ হবে না
+                    isWithinCurrentStand = (dist <= effectiveRadius) || hasSpecialTimerActive;
 
                     const distElement = document.getElementById('profileDistance');
                     if(distElement && currentUser) {
-                        distElement.innerText = `${dist} মিটার (সর্বোচ্চ সীমা: ${effectiveRadius}মি.)`;
-                        renderDriverActions(isWithinCurrentStand, dist, effectiveRadius);
+                        let timerText = hasSpecialTimerActive ? " (স্পেশাল টাইমার সচল)" : "";
+                        distElement.innerText = `${dist} মিটার (সর্বোচ্চ সীমা: ${effectiveRadius}মি.)${timerText}`;
+                        renderDriverActions(isWithinCurrentStand, dist, effectiveRadius, hasSpecialTimerActive);
                     }
 
                     const manualMsg = document.getElementById('manualPermissionMsg');
@@ -428,7 +453,7 @@
             }
         }
 
-        function renderDriverActions(isWithinStand, dist, effectiveRadius) {
+        function renderDriverActions(isWithinStand, dist, effectiveRadius, hasSpecialTimerActive) {
             if (!currentUser) return;
             const actionArea = document.getElementById('standActionArea');
             const breakSection = document.getElementById('breakSection');
@@ -441,14 +466,14 @@
                     <button onclick="completeTrip()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2.5 rounded font-bold text-xs cursor-pointer">আমার ট্রিপ শেষ / সিরিয়াল কাটুন</button>
                 `;
                 if(breakSection) breakSection.classList.remove('hidden');
-            } else if (dist <= BASE_RADIUS) {
+            } else if (dist <= BASE_RADIUS || hasSpecialTimerActive) {
                 if(actionArea) actionArea.innerHTML = `
-                    <button onclick="joinQueue()" class="w-full bg-green-600 hover:bg-green-700 text-white p-2.5 rounded font-bold text-xs cursor-pointer">স্ট্যান্ডে আছেন - সিরিয়ালে যুক্ত হোন</button>
+                    <button onclick="joinQueue()" class="w-full bg-green-600 hover:bg-green-700 text-white p-2.5 rounded font-bold text-xs cursor-pointer">স্ট্যান্ডে আছেন / স্পেশাল পারমিশন - সিরিয়ালে যুক্ত হোন</button>
                 `;
                 if(breakSection) breakSection.classList.add('hidden');
             } else {
                 if(actionArea) actionArea.innerHTML = `
-                    <div class="p-2 bg-amber-50 text-amber-800 text-center rounded text-xs">সিরিয়ালে ঢুকতে হলে ৩০০ মিটারের ভেতরে আসুন। (বর্তমান দূরত্ব: ${dist}মি.)</div>
+                    <div class="p-2 bg-amber-50 text-amber-800 text-center rounded text-xs">সিরিয়ালে ঢুকতে হলে সীমার ভেতরে আসুন। (বর্তমান দূরত্ব: ${dist}মি.)</div>
                 `;
                 if(breakSection) breakSection.classList.add('hidden');
             }
@@ -463,11 +488,12 @@
                     startTime: new Date().getTime(), 
                     timeStr: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                     statusNote: null,
-                    extraBonusDist: 0 
+                    extraBonusDist: 0,
+                    specialTimerExpiry: 0
                 });
                 localStorage.setItem('chandrima_queue', JSON.stringify(queue));
                 loadQueueData();
-                renderDriverActions(isWithinCurrentStand, 0, BASE_RADIUS);
+                renderDriverActions(isWithinCurrentStand, 0, BASE_RADIUS, false);
             }
         }
 
@@ -495,7 +521,7 @@
             localStorage.setItem('chandrima_queue', JSON.stringify(queue));
             alert('আপনার ট্রিপ সম্পন্ন হয়েছে!');
             loadQueueData();
-            renderDriverActions(isWithinCurrentStand, 0, BASE_RADIUS);
+            renderDriverActions(isWithinCurrentStand, 0, BASE_RADIUS, false);
         }
 
         function submitManualEntry() {
@@ -522,7 +548,8 @@
                     startTime: new Date().getTime(),
                     timeStr: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
                     statusNote: null,
-                    extraBonusDist: 0
+                    extraBonusDist: 0,
+                    specialTimerExpiry: 0
                 });
                 localStorage.setItem('chandrima_queue', JSON.stringify(queue));
                 alert(`${name}-কে সফলভাবে সিরিয়ালে যুক্ত করা হয়েছে!`);
@@ -542,7 +569,7 @@
             if (confirm('আজকের সমস্ত সিরিয়াল রিসেট করতে চান?')) {
                 localStorage.removeItem('chandrima_queue');
                 loadQueueData();
-                if(currentUser) renderDriverActions(isWithinCurrentStand, 0, BASE_RADIUS);
+                if(currentUser) renderDriverActions(isWithinCurrentStand, 0, BASE_RADIUS, false);
                 toggleAdminModal();
                 alert('সিরিয়াল সফলভাবে রিসেট করা হয়েছে!');
             }
@@ -574,13 +601,14 @@
 
                 let noteBadge = item.statusNote ? `<span class="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold"><i class="fa-solid fa-triangle-exclamation"></i> ${item.statusNote}</span>` : '';
                 let distBadge = item.extraBonusDist ? `<span class="bg-indigo-100 text-indigo-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold">এক্সট্রা দূরত্ব: +${item.extraBonusDist}মি</span>` : '';
+                let timerBadge = (item.specialTimerExpiry && now < item.specialTimerExpiry) ? `<span class="bg-purple-100 text-purple-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold">স্পেশাল টাইমার সচল</span>` : '';
 
                 html += `
                     <div class="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between border-l-4 ${index === 0 ? 'border-green-600 bg-green-50/30' : 'border-gray-300'}">
                         <div class="flex items-center space-x-3">
                             <span class="w-7 h-7 flex items-center justify-center bg-gray-800 text-white font-bold rounded-full text-xs">${index + 1}</span>
                             <div>
-                                <h4 class="font-bold text-gray-800 text-xs">${item.name} ${index === 0 ? '<span class="bg-green-600 text-white text-[9px] px-1.5 py-0.5 rounded ml-1">পরবর্তী ট্রিপ</span>' : ''} ${noteBadge} ${distBadge}</h4>
+                                <h4 class="font-bold text-gray-800 text-xs">${item.name} ${index === 0 ? '<span class="bg-green-600 text-white text-[9px] px-1.5 py-0.5 rounded ml-1">পরবর্তী ট্রিপ</span>' : ''} ${noteBadge} ${distBadge} ${timerBadge}</h4>
                                 <p class="text-[11px] text-gray-500">${item.bike} • ${item.phone}</p>
                             </div>
                         </div>
