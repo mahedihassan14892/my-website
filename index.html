@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>চন্দ্রিমা মোটরবাইক একতা যুব উন্নয়ন সমিতি</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+
+    <style>
+        .active-tab { border-bottom: 3px solid #16a34a; color: #16a34a; font-weight: bold; }
+        .hidden-section { display: none; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800 pb-20">
+
+
+    <!-- Header Navigation -->
+    <header class="bg-green-700 text-white p-4 shadow-lg sticky top-0 z-50">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-lg font-bold">চন্দ্রিমা বাইকার একতা</h1>
+                <p class="text-xs text-green-200">ডিজিটাল অটোমেটিক স্ট্যান্ড ম্যানেজমেন্ট</p>
+            </div>
+            <button onclick="toggleAdminModal()" class="bg-green-900 hover:bg-green-800 text-xs px-3 py-1.5 rounded-lg border border-green-500">
+                <i class="fa-solid fa-lock mr-1"></i> এডমিন
+            </button>
+        </div>
+    </header>
+
+
+    <!-- App Container -->
+    <main class="max-w-md mx-auto p-4 space-y-4">
+
+
+        <!-- Notice Board -->
+        <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded shadow-sm">
+            <div class="flex items-center text-amber-800 font-bold text-sm mb-1">
+                <i class="fa-solid fa-bullhorn mr-2"></i> সমিতির নোটিশ বোর্ড
+            </div>
+            <p id="noticeText" class="text-xs text-amber-900 leading-relaxed">
+                সকল রাইডারদের অবগতির জন্য জানানো যাচ্ছে যে, স্ট্যান্ডের ১০০ মিটারের মধ্যে আসলেই শুধুমাত্র সিরিয়াল কাজ করবে।
+            </p>
+        </div>
+
+
+        <!-- Navigation Tabs -->
+        <div class="flex bg-white rounded-lg shadow-sm overflow-hidden text-sm">
+            <button onclick="switchTab('queue')" id="tab-queue" class="flex-1 py-2.5 text-center active-tab">
+                <i class="fa-solid fa-list-ol mr-1"></i> লাইভ সিরিয়াল
+            </button>
+            <button onclick="switchTab('driver')" id="tab-driver" class="flex-1 py-2.5 text-center text-gray-500">
+                <i class="fa-solid fa-id-card mr-1"></i> মাই প্রোফাইল
+            </button>
+            <button onclick="switchTab('manual')" id="tab-manual" class="flex-1 py-2.5 text-center text-gray-500">
+                <i class="fa-solid fa-keyboard mr-1"></i> ম্যানুয়াল
+            </button>
+        </div>
+
+
+        <!-- TAB 1: LIVE QUEUE DISPLAY -->
+        <section id="section-queue" class="space-y-3">
+            <div class="bg-white p-3 rounded-lg shadow-sm flex justify-between items-center text-xs">
+                <span>স্ট্যান্ডে উপস্থিত: <strong id="totalInStand" class="text-green-600 font-bold">0</strong> জন</span>
+                <span>মোট সিরিয়ালে: <strong id="totalInQueue" class="text-blue-600 font-bold">0</strong> জন</span>
+            </div>
+
+
+            <!-- Queue List -->
+            <div id="queueListContainer" class="space-y-2">
+                <div class="text-center py-8 text-gray-400 text-sm">সিরিয়ালের তথ্য লোড হচ্ছে...</div>
+            </div>
+        </section>
+
+
+        <!-- TAB 2: DRIVER REGISTRATION & STATUS -->
+        <section id="section-driver" class="hidden-section space-y-4">
+            
+            <!-- Registration Form -->
+            <div id="registrationBox" class="bg-white p-4 rounded-lg shadow-sm space-y-3">
+                <h3 class="font-bold text-gray-700 text-sm border-b pb-2">রাইডার লগইন / রেজিস্ট্রেশন</h3>
+                <form id="regForm" onsubmit="handleRegistration(event)" class="space-y-3 text-xs">
+                    <div>
+                        <label class="block mb-1 font-semibold">পূর্ণ নাম</label>
+                        <input type="text" id="regName" required placeholder="আপনার নাম লিখুন" class="w-full p-2 border rounded focus:ring-1 focus:ring-green-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block mb-1 font-semibold">মোবাইল নম্বর (লগইন আইডি)</label>
+                        <input type="tel" id="regPhone" required placeholder="017XXXXXXXX" class="w-full p-2 border rounded focus:ring-1 focus:ring-green-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block mb-1 font-semibold">বাইক নম্বর</label>
+                        <input type="text" id="regBike" required placeholder="ঢাকা মেট্রো-হ-XXXX" class="w-full p-2 border rounded focus:ring-1 focus:ring-green-500 outline-none">
+                    </div>
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white p-2.5 rounded-lg font-bold shadow transition">
+                        লগইন ও প্রোফাইলে প্রবেশ করুন
+                    </button>
+                </form>
+            </div>
+
+
+            <!-- Driver Status Box -->
+            <div id="driverStatusBox" class="hidden bg-white p-4 rounded-lg shadow-sm space-y-3">
+                <div class="flex justify-between items-center border-b pb-2">
+                    <h3 class="font-bold text-gray-700 text-sm">রাইডার প্রোফাইল ও স্ট্যাটাস</h3>
+                    <button onclick="logoutDriver()" class="text-xs text-red-600 hover:underline"><i class="fa-solid fa-right-from-bracket"></i> লগআউট</button>
+                </div>
+                <div class="text-xs space-y-2 bg-gray-50 p-3 rounded">
+                    <p>নাম: <strong id="profileName" class="text-gray-900"></strong></p>
+                    <p>নম্বর: <strong id="profilePhone" class="text-gray-900"></strong></p>
+                    <p>বাইক: <strong id="profileBike" class="text-gray-900"></strong></p>
+                    <p>স্ট্যান্ড দূরত্ব: <strong id="profileDistance" class="text-blue-600">মাপা হচ্ছে...</strong></p>
+                </div>
+                <div id="standActionArea" class="pt-2"></div>
+            </div>
+        </section>
+
+
+        <!-- TAB 3: MANUAL CONTROLS & INFO -->
+        <section id="section-manual" class="hidden-section space-y-3">
+            <div class="bg-white p-4 rounded-lg shadow-sm space-y-3 text-xs">
+                <h3 class="font-bold text-gray-700 text-sm border-b pb-2"><i class="fa-solid fa-circle-info mr-1"></i> ব্যবহারের নিয়মাবলী</h3>
+                <ul class="list-disc list-inside space-y-1.5 text-gray-600 leading-relaxed">
+                    <li>স্ট্যান্ডের ১০০ মিটারের মধ্যে অবস্থান করলে অ্যাপ স্বয়ংক্রিয়ভাবে আপনাকে সিরিয়ালে যুক্ত হতে দেবে।</li>
+                    <li>সিরিয়াল অনুযায়ী ট্রিপ শেষ হলে বা সিরিয়াল কাটতে চাইলে "আমার ট্রিপ শেষ" বাটনে চাপ দিন।</li>
+                    <li>স্মার্টফোন বা জিপিএস সমস্যা থাকলে স্ট্যান্ডের দায়িত্বপ্রাপ্ত কমিটি সদস্যের মাধ্যমে ম্যানুয়ালি সিরিয়ালে নাম তুলতে পারবেন।</li>
+                </ul>
+            </div>
+        </section>
+
+
+    </main>
+
+
+    <!-- Admin Modal -->
+    <div id="adminModal" class="fixed inset-0 bg-black/50 hidden flex justify-center items-center z-50 p-4">
+        <div class="bg-white rounded-lg p-4 w-full max-w-sm space-y-3 text-xs">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 class="font-bold text-sm text-green-700">এডমিন কন্ট্রোল প্যানেল</h3>
+                <button onclick="toggleAdminModal()" class="text-gray-500 font-bold text-sm">✕</button>
+            </div>
+            <div id="adminLoginArea" class="space-y-2">
+                <label class="block font-semibold">এডমিন পিন নম্বর দিন</label>
+                <input type="password" id="adminPin" placeholder="পিন কোড দিন (ডিফল্ট: 1234)" class="w-full p-2 border rounded outline-none">
+                <button onclick="verifyAdmin()" class="w-full bg-green-700 text-white p-2 rounded font-bold">লগইন</button>
+            </div>
+            <div id="adminPanelControls" class="hidden space-y-3">
+                <div>
+                    <label class="block font-semibold mb-1">নোটিশ বোর্ড আপডেট করুন</label>
+                    <textarea id="adminNoticeInput" class="w-full p-2 border rounded outline-none h-16"></textarea>
+                    <button onclick="updateNotice()" class="mt-1 bg-amber-600 text-white px-3 py-1 rounded">নোটিশ সেভ করুন</button>
+                </div>
+                
+                <!-- Admin Manual Add Entry -->
+                <div id="adminManualBox" class="space-y-2 pt-2 border-t">
+                    <label class="block font-semibold">ম্যানুয়াল সিরিয়াল এন্ট্রি (এডমিন)</label>
+                    <input type="text" id="adminManName" placeholder="রাইডারের নাম" class="w-full p-1.5 border rounded outline-none text-xs">
+                    <input type="text" id="adminManBike" placeholder="বাইক নম্বর" class="w-full p-1.5 border rounded outline-none text-xs">
+                    <input type="tel" id="adminManPhone" placeholder="মোবাইল নম্বর" class="w-full p-1.5 border rounded outline-none text-xs">
+                    <button onclick="adminAddManualQueue()" class="w-full bg-blue-600 text-white p-1.5 rounded font-bold text-xs">সিরিয়ালে নাম তুলে দিন</button>
+                </div>
+
+
+                <hr class="my-2">
+                <div>
+                    <button onclick="resetQueue()" class="w-full bg-red-600 text-white p-2 rounded font-bold">আজকের সম্পূর্ণ সিরিয়াল রিসেট করুন</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // চন্দ্রিমা মডেল টাউন স্ট্যান্ডের জিপিএস কোঅর্ডিনেট (Latitude, Longitude)
+        const STAND_LAT = 23.7588; 
+        const STAND_LNG = 90.3544;
+        const MAX_ALLOWED_DISTANCE_METERS = 100; // ১০০ মিটার
+
+
+        let currentUser = JSON.parse(localStorage.getItem('chandrima_driver')) || null;
+        let isAdminLoggedIn = false;
+
+
+        // Initialize App
+        document.addEventListener("DOMContentLoaded", () => {
+            loadNotice();
+            loadQueueData();
+            checkLoginState();
+            startLocationTracking();
+        });
+
+
+        // Tab Switch Logic
+        function switchTab(tabName) {
+            ['queue', 'driver', 'manual'].forEach(tab => {
+                document.getElementById(`section-${tab}`).classList.add('hidden-section');
+                document.getElementById(`tab-${tab}`).classList.remove('active-tab');
+                document.getElementById(`tab-${tab}`).classList.add('text-gray-500');
+            });
+            document.getElementById(`section-${tabName}`).classList.remove('hidden-section');
+            document.getElementById(`tab-${tabName}`).classList.add('active-tab');
+            document.getElementById(`tab-${tabName}`).classList.remove('text-gray-500');
+        }
+
+
+        // Admin Modal Controls
+        function toggleAdminModal() {
+            const modal = document.getElementById('adminModal');
+            modal.classList.toggle('hidden');
+        }
+
+
+        function verifyAdmin() {
+            const pin = document.getElementById('adminPin').value;
+            if (pin === '1234') { // ডিফল্ট পিন ১২৩৪
+                isAdminLoggedIn = true;
+                document.getElementById('adminLoginArea').classList.add('hidden');
+                document.getElementById('adminPanelControls').classList.remove('hidden');
+            } else {
+                alert('ভুল পিন কোড! সঠিক পিন দিন।');
+            }
+        }
+
+
+        function updateNotice() {
+            const newNotice = document.getElementById('adminNoticeInput').value.trim();
+            if (newNotice) {
+                localStorage.setItem('chandrima_notice', newNotice);
+                document.getElementById('noticeText').innerText = newNotice;
+                alert('নোটিশ সফলভাবে আপডেট হয়েছে!');
+                toggleAdminModal();
+            }
+        }
+
+
+        function loadNotice() {
+            const notice = localStorage.getItem('chandrima_notice');
+            if (notice) {
+                document.getElementById('noticeText').innerText = notice;
+            }
+        }
+
+
+        // Registration & Login Handle
+        function handleRegistration(e) {
+            e.preventDefault();
+            const name = document.getElementById('regName').value.trim();
+            const phone = document.getElementById('regPhone').value.trim();
+            const bike = document.getElementById('regBike').value.trim();
+
+
+            currentUser = { name, phone, bike };
+            localStorage.setItem('chandrima_driver', JSON.stringify(currentUser));
+            checkLoginState();
+            startLocationTracking();
+        }
+
+
+        function logoutDriver() {
+            currentUser = null;
+            localStorage.removeItem('chandrima_driver');
+            checkLoginState();
+        }
+
+
+        function checkLoginState() {
+            const regBox = document.getElementById('registrationBox');
+            const statusBox = document.getElementById('driverStatusBox');
+
+
+            if (currentUser) {
+                regBox.classList.add('hidden');
+                statusBox.classList.remove('hidden');
+                document.getElementById('profileName').innerText = currentUser.name;
+                document.getElementById('profilePhone').innerText = currentUser.phone;
+                document.getElementById('profileBike').innerText = currentUser.bike;
+                renderDriverActions(false, null);
+            } else {
+                regBox.classList.remove('hidden');
+                statusBox.classList.add('hidden');
+            }
+        }
+
+
+        // GPS Distance Calculation (Haversine Formula)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Earth radius in meters
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+
+            return Math.round(R * c); // Meters
+        }
+
+
+        function startLocationTracking() {
+            if (!currentUser) return;
+
+
+            if ("geolocation" in navigator) {
+                navigator.geolocation.watchPosition((pos) => {
+                    const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, STAND_LAT, STAND_LNG);
+                    const distElement = document.getElementById('profileDistance');
+                    if(distElement) {
+                        distElement.innerText = `${dist} মিটার`;
+                    }
+                    const isWithinStand = dist <= MAX_ALLOWED_DISTANCE_METERS;
+                    renderDriverActions(isWithinStand, dist);
+                }, (err) => {
+                    document.getElementById('profileDistance').innerText = 'জিপিএস অন করুন';
+                }, { enableHighAccuracy: true });
+            }
+        }
+
+
+        function renderDriverActions(isWithinStand, dist) {
+            if (!currentUser) return;
+            const actionArea = document.getElementById('standActionArea');
+            let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            let inQueue = queue.some(q => q.phone === currentUser.phone);
+
+
+            if (inQueue) {
+                actionArea.innerHTML = `
+                    <div class="p-2.5 bg-blue-50 text-blue-800 text-center rounded mb-2 font-bold text-xs">আপনি বর্তমানে সফলভাবে সিরিয়ালে আছেন!</div>
+                    <button onclick="completeTrip()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2.5 rounded font-bold text-xs">আমার ট্রিপ শেষ / সিরিয়াল কাটুন</button>
+                `;
+            } else if (isWithinStand) {
+                actionArea.innerHTML = `
+                    <button onclick="joinQueue()" class="w-full bg-green-600 hover:bg-green-700 text-white p-2.5 rounded font-bold text-xs">আপনি স্ট্যান্ডে আছেন - সিরিয়ালে যুক্ত হোন</button>
+                `;
+            } else {
+                actionArea.innerHTML = `
+                    <div class="p-2 bg-amber-50 text-amber-800 text-center rounded text-xs">সিরিয়ালে ঢুকতে হলে স্ট্যান্ডের ১০০ মিটারের ভেতরে আসুন। (বর্তমান দূরত্ব: ${dist ? dist+'মি.' : 'মাপা হচ্ছে'})</div>
+                `;
+            }
+        }
+
+
+        // Queue Operations
+        function joinQueue() {
+            if (!currentUser) return;
+            let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            if (!queue.some(q => q.phone === currentUser.phone)) {
+                queue.push({ ...currentUser, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) });
+                localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+                speakAnnouncement(`${currentUser.name} সিরিয়ালে যুক্ত হয়েছেন`);
+                loadQueueData();
+                checkLoginState();
+            }
+        }
+
+
+        function completeTrip() {
+            if (!currentUser) return;
+            let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            queue = queue.filter(q => q.phone !== currentUser.phone);
+            localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+            alert('আপনার ট্রিপ সম্পন্ন হয়েছে!');
+            loadQueueData();
+            checkLoginState();
+        }
+
+
+        function adminAddManualQueue() {
+            const name = document.getElementById('adminManName').value.trim();
+            const bike = document.getElementById('adminManBike').value.trim();
+            const phone = document.getElementById('adminManPhone').value.trim();
+
+
+            if (!name || !phone) {
+                alert('দয়া করে নাম ও ফোন নম্বর দিন!');
+                return;
+            }
+
+
+            let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            if (!queue.some(q => q.phone === phone)) {
+                queue.push({ name, bike: bike || 'বাইক', phone, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) });
+                localStorage.setItem('chandrima_queue', JSON.stringify(queue));
+                alert(`${name}-কে সিরিয়ালে যুক্ত করা হয়েছে!`);
+                loadQueueData();
+                toggleAdminModal();
+                document.getElementById('adminManName').value = '';
+                document.getElementById('adminManBike').value = '';
+                document.getElementById('adminManPhone').value = '';
+            } else {
+                alert('এই রাইডার ইতিমধ্যে সিরিয়ালে আছেন!');
+            }
+        }
+
+
+        function resetQueue() {
+            if (confirm('আপনি কি নিশ্চিত যে আজকের সমস্ত সিরিয়াল রিসেট করতে চান?')) {
+                localStorage.removeItem('chandrima_queue');
+                loadQueueData();
+                checkLoginState();
+                toggleAdminModal();
+                alert('সিরিয়াল সফলভাবে রিসেট করা হয়েছে!');
+            }
+        }
+
+
+        function loadQueueData() {
+            let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            const container = document.getElementById('queueListContainer');
+            document.getElementById('totalInQueue').innerText = queue.length;
+            document.getElementById('totalInStand').innerText = queue.length;
+
+
+            if (queue.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-gray-400 text-sm">বর্তমানে লাইভ সিরিয়ালে কোনো বাইক নেই।</div>`;
+                return;
+            }
+
+
+            let html = '';
+            queue.forEach((item, index) => {
+                html += `
+                    <div class="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between border-l-4 ${index === 0 ? 'border-green-600 bg-green-50/30' : 'border-gray-300'}">
+                        <div class="flex items-center space-x-3">
+                            <span class="w-7 h-7 flex items-center justify-center bg-gray-800 text-white font-bold rounded-full text-xs">${index + 1}</span>
+                            <div>
+                                <h4 class="font-bold text-gray-800 text-xs">${item.name} ${index === 0 ? '<span class="bg-green-600 text-white text-[9px] px-1.5 py-0.5 rounded ml-1">পরবর্তী ট্রিপ</span>' : ''}</h4>
+                                <p class="text-[11px] text-gray-500">${item.bike} • ${item.phone}</p>
+                            </div>
+                        </div>
+                        <span class="text-[10px] text-gray-400">${item.time || ''}</span>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+
+        // Voice Announcement Function
+        function speakAnnouncement(message) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(message);
+                utterance.lang = 'bn-BD';
+                utterance.rate = 0.9;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+    </script>
+</body>
+</html>
