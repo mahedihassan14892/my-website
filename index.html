@@ -271,4 +271,118 @@
 
     <!-- JavaScript Application Logic -->
     <script>
-        const STAND_LAT = 23.75
+        // অটো মেমোরি ও স্টোরেজ সেফটি ক্লিনার (Anti-Hang Memory Protection)
+        (function autoMemoryPurge() {
+            try {
+                // অতিরিক্ত বা করাপ্ট ডেটা চেক করে ক্লিন করা
+                const q = localStorage.getItem('chandrima_queue');
+                if (q && q.length > 500000) { localStorage.removeItem('chandrima_queue'); }
+            } catch (e) {
+                localStorage.clear();
+            }
+        })();
+
+        const STAND_LAT = 23.7588; 
+        const STAND_LNG = 90.3544;
+        const BASE_RADIUS = 300; 
+
+        let currentUser = null;
+        try {
+            currentUser = JSON.parse(localStorage.getItem('chandrima_driver')) || null;
+        } catch (e) {
+            localStorage.removeItem('chandrima_driver');
+        }
+
+        let isAdminLoggedIn = false;
+        let isWithinCurrentStand = false;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            loadNotice();
+            loadCommittee();
+            loadQueueData();
+            checkLoginState();
+            startLocationTracking();
+            setInterval(updateQueueTimers, 1000);
+        });
+
+        function switchTab(tabName) {
+            ['queue', 'driver', 'manual'].forEach(tab => {
+                const sec = document.getElementById(`section-${tab}`);
+                const tb = document.getElementById(`tab-${tab}`);
+                if(sec) sec.classList.add('hidden-section');
+                if(tb) {
+                    tb.classList.remove('active-tab');
+                    tb.classList.add('text-gray-600', 'font-medium');
+                }
+            });
+            const targetSec = document.getElementById(`section-${tabName}`);
+            const targetTab = document.getElementById(`tab-${tabName}`);
+            if(targetSec) targetSec.classList.remove('hidden-section');
+            if(targetTab) {
+                targetTab.classList.add('active-tab');
+                targetTab.classList.remove('text-gray-600', 'font-medium');
+            }
+        }
+
+        function toggleAdminModal() {
+            const modal = document.getElementById('adminModal');
+            if(modal) {
+                modal.classList.toggle('hidden');
+                if(!modal.classList.contains('hidden') && isAdminLoggedIn) {
+                    populateAdminDriverDropdown();
+                    renderRegisteredDriversForAdmin();
+                }
+            }
+        }
+
+        function verifyAdmin() {
+            const pinInput = document.getElementById('adminPinInput');
+            if(!pinInput) return;
+            const pin = pinInput.value.trim();
+            const savedPin = localStorage.getItem('chandrima_admin_pin') || '1234';
+            if (pin === savedPin) {
+                isAdminLoggedIn = true;
+                const loginArea = document.getElementById('adminLoginArea');
+                const controls = document.getElementById('adminPanelControls');
+                if(loginArea) loginArea.classList.add('hidden');
+                if(controls) controls.classList.remove('hidden');
+                populateAdminDriverDropdown();
+                renderRegisteredDriversForAdmin();
+            } else {
+                alert('ভুল পিন কোড! সঠিক পিন দিন।');
+            }
+        }
+
+        function loadCommittee() {
+            let committee = {};
+            try {
+                committee = JSON.parse(localStorage.getItem('chandrima_committee')) || {};
+            } catch(e) { committee = {}; }
+
+            if(committee.presName) document.getElementById('committeePresName').innerText = committee.presName;
+            if(committee.presPhoto) document.getElementById('committeePresImg').src = committee.presPhoto;
+
+            if(committee.vpName) document.getElementById('committeeVpName').innerText = committee.vpName;
+            if(committee.vpPhoto) document.getElementById('committeeVpImg').src = committee.vpPhoto;
+
+            if(committee.orgName) document.getElementById('committeeOrgName').innerText = committee.orgName;
+            if(committee.orgPhoto) document.getElementById('committeeOrgImg').src = committee.orgPhoto;
+        }
+
+        function updateCommittee() {
+            let committee = {};
+            try {
+                committee = JSON.parse(localStorage.getItem('chandrima_committee')) || {};
+            } catch(e) { committee = {}; }
+
+            const presName = document.getElementById('adminPresName').value.trim();
+            const vpName = document.getElementById('adminVpName').value.trim();
+            const orgName = document.getElementById('adminOrgName').value.trim();
+
+            if(presName) committee.presName = presName;
+            if(vpName) committee.vpName = vpName;
+            if(orgName) committee.orgName = orgName;
+
+            const presFile = document.getElementById('adminPresPhoto').files[0];
+            const vpFile = document.getElementById('adminVpPhoto').files[0];
+            const orgFile = document.
