@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
-        .active-tab { border-bottom: 3px solid #16a34a; color: #16a34a; font-weight: bold; }
+        .active-tab { border-bottom: 3px solid #16a34a; color: #16a34a; font-weight: bold; background-color: #f0fdf4; }
         .hidden-section { display: none; }
     </style>
 </head>
@@ -23,7 +23,7 @@
                 <h1 class="text-lg font-bold">চন্দ্রিমা বাইকার একতা</h1>
                 <p class="text-xs text-green-200">ডিজিটাল অটোমেটিক স্ট্যান্ড ম্যানেজমেন্ট</p>
             </div>
-            <button onclick="toggleAdminModal()" class="bg-green-900 hover:bg-green-800 text-xs px-3 py-1.5 rounded-lg border border-green-500">
+            <button onclick="toggleAdminModal()" class="bg-green-900 hover:bg-green-800 text-xs px-3 py-1.5 rounded-lg border border-green-500 cursor-pointer">
                 <i class="fa-solid fa-lock mr-1"></i> এডমিন
             </button>
         </div>
@@ -43,14 +43,14 @@
         </div>
 
         <!-- Navigation Tabs -->
-        <div class="flex bg-white rounded-lg shadow-sm overflow-hidden text-sm">
-            <button onclick="switchTab('queue')" id="tab-queue" class="flex-1 py-2.5 text-center active-tab">
+        <div class="flex bg-white rounded-lg shadow-sm overflow-hidden text-sm border">
+            <button onclick="switchTab('queue')" id="tab-queue" class="flex-1 py-3 text-center active-tab">
                 <i class="fa-solid fa-list-ol mr-1"></i> লাইভ সিরিয়াল
             </button>
-            <button onclick="switchTab('driver')" id="tab-driver" class="flex-1 py-2.5 text-center text-gray-500">
+            <button onclick="switchTab('driver')" id="tab-driver" class="flex-1 py-3 text-center text-gray-600 font-medium">
                 <i class="fa-solid fa-id-card mr-1"></i> মাই প্রোফাইল
             </button>
-            <button onclick="switchTab('manual')" id="tab-manual" class="flex-1 py-2.5 text-center text-gray-500">
+            <button onclick="switchTab('manual')" id="tab-manual" class="flex-1 py-3 text-center text-gray-600 font-medium">
                 <i class="fa-solid fa-keyboard mr-1"></i> ম্যানুয়াল এন্ট্রি
             </button>
         </div>
@@ -87,7 +87,7 @@
                         <label class="block mb-1 font-semibold">বাইক নম্বর</label>
                         <input type="text" id="regBike" required placeholder="ঢাকা মেট্রো-হ-XXXX" class="w-full p-2 border rounded focus:ring-1 focus:ring-green-500 outline-none">
                     </div>
-                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white p-2.5 rounded-lg font-bold shadow transition">
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white p-2.5 rounded-lg font-bold shadow transition cursor-pointer">
                         লগইন ও প্রোফাইলে প্রবেশ করুন
                     </button>
                 </form>
@@ -97,7 +97,7 @@
             <div id="driverStatusBox" class="hidden bg-white p-4 rounded-lg shadow-sm space-y-3">
                 <div class="flex justify-between items-center border-b pb-2">
                     <h3 class="font-bold text-gray-700 text-sm">রাইডার প্রোফাইল ও স্ট্যাটাস</h3>
-                    <button onclick="logoutDriver()" class="text-xs text-red-600 hover:underline"><i class="fa-solid fa-right-from-bracket"></i> লগআউট</button>
+                    <button onclick="logoutDriver()" class="text-xs text-red-600 hover:underline cursor-pointer"><i class="fa-solid fa-right-from-bracket"></i> লগআউট</button>
                 </div>
                 <div class="text-xs space-y-2 bg-gray-50 p-3 rounded">
                     <p>নাম: <strong id="profileName" class="text-gray-900"></strong></p>
@@ -115,7 +115,7 @@
                         <option value="নামাজের বিরতি">নামাজের বিরতি</option>
                         <option value="জরুরী ব্যক্তিগত কাজ">জরুরী ব্যক্তিগত কাজ</option>
                     </select>
-                    <button onclick="markLeaveReason()" class="w-full bg-amber-600 hover:bg-amber-700 text-white p-2 rounded font-bold">
+                    <button onclick="markLeaveReason()" class="w-full bg-amber-600 hover:bg-amber-700 text-white p-2 rounded font-bold cursor-pointer">
                         কারণ মার্ক করে স্ট্যান্ড ছাড়ুন
                     </button>
                 </div>
@@ -141,7 +141,7 @@
                         <label class="block font-semibold mb-1">মোবাইল নম্বর</label>
                         <input type="tel" id="manualPhoneInput" placeholder="017XXXXXXXX" class="w-full p-2 border rounded outline-none">
                     </div>
-                    <button onclick="submitManualEntry()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded font-bold shadow transition mt-2">
+                    <button onclick="submitManualEntry()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded font-bold shadow transition mt-2 cursor-pointer">
                         সিরিয়ালে নাম তুলে দিন
                     </button>
                 </div>
@@ -161,27 +161,27 @@
         <div class="bg-white rounded-lg p-4 w-full max-w-sm space-y-3 text-xs">
             <div class="flex justify-between items-center border-b pb-2">
                 <h3 class="font-bold text-sm text-green-700">এডমিন কন্ট্রোল প্যানেল</h3>
-                <button onclick="toggleAdminModal()" class="text-gray-500 font-bold text-sm">✕</button>
+                <button onclick="toggleAdminModal()" class="text-gray-500 font-bold text-base px-1 cursor-pointer">✕</button>
             </div>
             <div id="adminLoginArea" class="space-y-2">
                 <label class="block font-semibold">এডমিন পিন নম্বর দিন</label>
-                <input type="password" id="adminPinInput" placeholder="পিন কোড দিন" class="w-full p-2 border rounded outline-none">
-                <button onclick="verifyAdmin()" class="w-full bg-green-700 text-white p-2 rounded font-bold">লগইন</button>
+                <input type="password" id="adminPinInput" placeholder="পিন কোড দিন (ডিফল্ট: 1234)" class="w-full p-2 border rounded outline-none">
+                <button onclick="verifyAdmin()" class="w-full bg-green-700 hover:bg-green-800 text-white p-2 rounded font-bold cursor-pointer">লগইন</button>
             </div>
             <div id="adminPanelControls" class="hidden space-y-3">
                 <div>
                     <label class="block font-semibold mb-1">নোটিশ বোর্ড আপডেট করুন</label>
                     <textarea id="adminNoticeInput" class="w-full p-2 border rounded outline-none h-16"></textarea>
-                    <button onclick="updateNotice()" class="mt-1 bg-amber-600 text-white px-3 py-1 rounded">নোটিশ সেভ করুন</button>
+                    <button onclick="updateNotice()" class="mt-1 bg-amber-600 text-white px-3 py-1 rounded cursor-pointer">নোটিশ সেভ করুন</button>
                 </div>
                 <div class="pt-2 border-t">
                     <label class="block font-semibold mb-1">এডমিন পিন পরিবর্তন করুন</label>
                     <input type="password" id="newAdminPin" placeholder="নতুন পিন দিন" class="w-full p-2 border rounded outline-none mb-1">
-                    <button onclick="changeAdminPin()" class="bg-blue-600 text-white px-3 py-1 rounded">পিন পরিবর্তন করুন</button>
+                    <button onclick="changeAdminPin()" class="bg-blue-600 text-white px-3 py-1 rounded cursor-pointer">পিন পরিবর্তন করুন</button>
                 </div>
                 <hr class="my-2">
                 <div>
-                    <button onclick="resetQueue()" class="w-full bg-red-600 text-white p-2 rounded font-bold">আজকের সম্পূর্ণ সিরিয়াল রিসেট করুন</button>
+                    <button onclick="resetQueue()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2 rounded font-bold cursor-pointer">আজকের সম্পূর্ণ সিরিয়াল রিসেট করুন</button>
                 </div>
             </div>
         </div>
@@ -191,7 +191,7 @@
     <script>
         const STAND_LAT = 23.7588; 
         const STAND_LNG = 90.3544;
-        const MAX_ALLOWED_DISTANCE_METERS = 300; // ৩০০ মিটার লিমিট
+        const MAX_ALLOWED_DISTANCE_METERS = 300;
 
         let currentUser = JSON.parse(localStorage.getItem('chandrima_driver')) || null;
         let isAdminLoggedIn = false;
@@ -202,53 +202,72 @@
             loadQueueData();
             checkLoginState();
             startLocationTracking();
-            setInterval(updateQueueTimers, 1000); // প্রতি সেকেন্ডে টাইম আপডেট হবে
+            setInterval(updateQueueTimers, 1000);
         });
 
         function switchTab(tabName) {
             ['queue', 'driver', 'manual'].forEach(tab => {
-                document.getElementById(`section-${tab}`).classList.add('hidden-section');
-                document.getElementById(`tab-${tab}`).classList.remove('active-tab');
-                document.getElementById(`tab-${tab}`).classList.add('text-gray-500');
+                const sec = document.getElementById(`section-${tab}`);
+                const tb = document.getElementById(`tab-${tab}`);
+                if(sec) sec.classList.add('hidden-section');
+                if(tb) {
+                    tb.classList.remove('active-tab');
+                    tb.classList.add('text-gray-600', 'font-medium');
+                }
             });
-            document.getElementById(`section-${tabName}`).classList.remove('hidden-section');
-            document.getElementById(`tab-${tabName}`).classList.add('active-tab');
-            document.getElementById(`tab-${tabName}`).classList.remove('text-gray-500');
+            const targetSec = document.getElementById(`section-${tabName}`);
+            const targetTab = document.getElementById(`tab-${tabName}`);
+            if(targetSec) targetSec.classList.remove('hidden-section');
+            if(targetTab) {
+                targetTab.classList.add('active-tab');
+                targetTab.classList.remove('text-gray-600', 'font-medium');
+            }
         }
 
         function toggleAdminModal() {
             const modal = document.getElementById('adminModal');
-            modal.classList.toggle('hidden');
+            if(modal) {
+                modal.classList.toggle('hidden');
+            }
         }
 
         function verifyAdmin() {
-            const pin = document.getElementById('adminPinInput').value;
+            const pinInput = document.getElementById('adminPinInput');
+            if(!pinInput) return;
+            const pin = pinInput.value.trim();
             const savedPin = localStorage.getItem('chandrima_admin_pin') || '1234';
             if (pin === savedPin) {
                 isAdminLoggedIn = true;
-                document.getElementById('adminLoginArea').classList.add('hidden');
-                document.getElementById('adminPanelControls').classList.remove('hidden');
+                const loginArea = document.getElementById('adminLoginArea');
+                const controls = document.getElementById('adminPanelControls');
+                if(loginArea) loginArea.classList.add('hidden');
+                if(controls) controls.classList.remove('hidden');
             } else {
                 alert('ভুল পিন কোড! সঠিক পিন দিন।');
             }
         }
 
         function changeAdminPin() {
-            const newPin = document.getElementById('newAdminPin').value.trim();
+            const pinField = document.getElementById('newAdminPin');
+            if(!pinField) return;
+            const newPin = pinField.value.trim();
             if (newPin.length >= 4) {
                 localStorage.setItem('chandrima_admin_pin', newPin);
                 alert('এডমিন পিন সফলভাবে পরিবর্তন করা হয়েছে!');
-                document.getElementById('newAdminPin').value = '';
+                pinField.value = '';
             } else {
                 alert('কমপক্ষে ৪ সংখ্যার পিন দিন!');
             }
         }
 
         function updateNotice() {
-            const newNotice = document.getElementById('adminNoticeInput').value.trim();
+            const noticeField = document.getElementById('adminNoticeInput');
+            if(!noticeField) return;
+            const newNotice = noticeField.value.trim();
             if (newNotice) {
                 localStorage.setItem('chandrima_notice', newNotice);
-                document.getElementById('noticeText').innerText = newNotice;
+                const noticeText = document.getElementById('noticeText');
+                if(noticeText) noticeText.innerText = newNotice;
                 alert('নোটিশ সফলভাবে আপডেট হয়েছে!');
                 toggleAdminModal();
             }
@@ -256,8 +275,9 @@
 
         function loadNotice() {
             const notice = localStorage.getItem('chandrima_notice');
-            if (notice) {
-                document.getElementById('noticeText').innerText = notice;
+            const noticeText = document.getElementById('noticeText');
+            if (notice && noticeText) {
+                noticeText.innerText = notice;
             }
         }
 
@@ -284,14 +304,17 @@
             const statusBox = document.getElementById('driverStatusBox');
 
             if (currentUser) {
-                regBox.classList.add('hidden');
-                statusBox.classList.remove('hidden');
-                document.getElementById('profileName').innerText = currentUser.name;
-                document.getElementById('profilePhone').innerText = currentUser.phone;
-                document.getElementById('profileBike').innerText = currentUser.bike;
+                if(regBox) regBox.classList.add('hidden');
+                if(statusBox) statusBox.classList.remove('hidden');
+                const pName = document.getElementById('profileName');
+                const pPhone = document.getElementById('profilePhone');
+                const pBike = document.getElementById('profileBike');
+                if(pName) pName.innerText = currentUser.name;
+                if(pPhone) pPhone.innerText = currentUser.phone;
+                if(pBike) pBike.innerText = currentUser.bike;
             } else {
-                regBox.classList.remove('hidden');
-                statusBox.classList.add('hidden');
+                if(regBox) regBox.classList.remove('hidden');
+                if(statusBox) statusBox.classList.add('hidden');
             }
         }
 
@@ -316,14 +339,12 @@
                     const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, STAND_LAT, STAND_LNG);
                     isWithinCurrentStand = dist <= MAX_ALLOWED_DISTANCE_METERS;
 
-                    // Update Profile Distance if logged in
                     const distElement = document.getElementById('profileDistance');
                     if(distElement && currentUser) {
                         distElement.innerText = `${dist} মিটার`;
                         renderDriverActions(isWithinCurrentStand, dist);
                     }
 
-                    // Update Manual Tab permission UI
                     const manualMsg = document.getElementById('manualPermissionMsg');
                     const manualForm = document.getElementById('manualFormArea');
                     if(manualMsg && manualForm) {
@@ -337,7 +358,6 @@
                         }
                     }
 
-                    // Auto Remove from Queue if driver goes beyond 300m (unless on marked break)
                     if (currentUser) {
                         let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
                         let driverIndex = queue.findIndex(q => q.phone === currentUser.phone);
@@ -364,21 +384,21 @@
             let inQueue = queue.some(q => q.phone === currentUser.phone);
 
             if (inQueue) {
-                actionArea.innerHTML = `
+                if(actionArea) actionArea.innerHTML = `
                     <div class="p-2.5 bg-blue-50 text-blue-800 text-center rounded mb-2 font-bold text-xs">আপনি বর্তমানে সফলভাবে সিরিয়ালে আছেন!</div>
-                    <button onclick="completeTrip()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2.5 rounded font-bold text-xs">আমার ট্রিপ শেষ / সিরিয়াল কাটুন</button>
+                    <button onclick="completeTrip()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2.5 rounded font-bold text-xs cursor-pointer">আমার ট্রিপ শেষ / সিরিয়াল কাটুন</button>
                 `;
-                breakSection.classList.remove('hidden');
+                if(breakSection) breakSection.classList.remove('hidden');
             } else if (isWithinStand) {
-                actionArea.innerHTML = `
-                    <button onclick="joinQueue()" class="w-full bg-green-600 hover:bg-green-700 text-white p-2.5 rounded font-bold text-xs">স্ট্যান্ডে আছেন - সিরিয়ালে যুক্ত হোন</button>
+                if(actionArea) actionArea.innerHTML = `
+                    <button onclick="joinQueue()" class="w-full bg-green-600 hover:bg-green-700 text-white p-2.5 rounded font-bold text-xs cursor-pointer">স্ট্যান্ডে আছেন - সিরিয়ালে যুক্ত হোন</button>
                 `;
-                breakSection.classList.add('hidden');
+                if(breakSection) breakSection.classList.add('hidden');
             } else {
-                actionArea.innerHTML = `
+                if(actionArea) actionArea.innerHTML = `
                     <div class="p-2 bg-amber-50 text-amber-800 text-center rounded text-xs">সিরিয়ালে ঢুকতে হলে স্ট্যান্ডের ৩০০ মিটারের ভেতরে আসুন। (বর্তমান দূরত্ব: ${dist}মি.)</div>
                 `;
-                breakSection.classList.add('hidden');
+                if(breakSection) breakSection.classList.add('hidden');
             }
         }
 
@@ -400,7 +420,9 @@
 
         function markLeaveReason() {
             if (!currentUser) return;
-            const reason = document.getElementById('leaveReason').value;
+            const reasonSel = document.getElementById('leaveReason');
+            if(!reasonSel) return;
+            const reason = reasonSel.value;
             let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
             let driver = queue.find(q => q.phone === currentUser.phone);
             if (driver) {
@@ -408,7 +430,8 @@
                 localStorage.setItem('chandrima_queue', JSON.stringify(queue));
                 alert(`আপনার কারণ "${reason}" সফলভাবে মার্ক করা হয়েছে।`);
                 loadQueueData();
-                document.getElementById('breakSection').classList.add('hidden');
+                const breakSec = document.getElementById('breakSection');
+                if(breakSec) breakSec.classList.add('hidden');
             }
         }
 
@@ -423,9 +446,14 @@
         }
 
         function submitManualEntry() {
-            const name = document.getElementById('manualNameInput').value.trim();
-            const bike = document.getElementById('manualBikeInput').value.trim();
-            const phone = document.getElementById('manualPhoneInput').value.trim();
+            const nameEl = document.getElementById('manualNameInput');
+            const bikeEl = document.getElementById('manualBikeInput');
+            const phoneEl = document.getElementById('manualPhoneInput');
+            if(!nameEl || !phoneEl) return;
+
+            const name = nameEl.value.trim();
+            const bike = bikeEl ? bikeEl.value.trim() : '';
+            const phone = phoneEl.value.trim();
 
             if (!name || !phone) {
                 alert('দয়া করে নাম ও মোবাইল নম্বর দিন!');
@@ -445,9 +473,9 @@
                 localStorage.setItem('chandrima_queue', JSON.stringify(queue));
                 alert(`${name}-কে সফলভাবে সিরিয়ালে যুক্ত করা হয়েছে!`);
                 
-                document.getElementById('manualNameInput').value = '';
-                document.getElementById('manualBikeInput').value = '';
-                document.getElementById('manualPhoneInput').value = '';
+                nameEl.value = '';
+                if(bikeEl) bikeEl.value = '';
+                phoneEl.value = '';
 
                 loadQueueData();
                 switchTab('queue');
@@ -469,8 +497,12 @@
         function loadQueueData() {
             let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
             const container = document.getElementById('queueListContainer');
-            document.getElementById('totalInQueue').innerText = queue.length;
-            document.getElementById('totalInStand').innerText = queue.length;
+            if(!container) return;
+
+            const totalQ = document.getElementById('totalInQueue');
+            const totalS = document.getElementById('totalInStand');
+            if(totalQ) totalQ.innerText = queue.length;
+            if(totalS) totalS.innerText = queue.length;
 
             if (queue.length === 0) {
                 container.innerHTML = `<div class="text-center py-8 text-gray-400 text-sm">বর্তমানে লাইভ সিরিয়ালে কোনো বাইক নেই।</div>`;
@@ -483,4 +515,43 @@
             queue.forEach((item, index) => {
                 const diffMs = now - (item.startTime || now);
                 const diffMins = Math.floor(diffMs / 60000);
-                const diffSecs = Math.floor((diffMs % 60000) / 10
+                const diffSecs = Math.floor((diffMs % 60000) / 1000);
+                const timeElapsedStr = `${diffMins} মি ${diffSecs} সে`;
+
+                let noteBadge = item.statusNote ? `<span class="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold"><i class="fa-solid fa-triangle-exclamation"></i> ${item.statusNote}</span>` : '';
+
+                html += `
+                    <div class="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between border-l-4 ${index === 0 ? 'border-green-600 bg-green-50/30' : 'border-gray-300'}">
+                        <div class="flex items-center space-x-3">
+                            <span class="w-7 h-7 flex items-center justify-center bg-gray-800 text-white font-bold rounded-full text-xs">${index + 1}</span>
+                            <div>
+                                <h4 class="font-bold text-gray-800 text-xs">${item.name} ${index === 0 ? '<span class="bg-green-600 text-white text-[9px] px-1.5 py-0.5 rounded ml-1">পরবর্তী ট্রিপ</span>' : ''} ${noteBadge}</h4>
+                                <p class="text-[11px] text-gray-500">${item.bike} • ${item.phone}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="block text-[10px] font-bold text-blue-600" id="timer-${index}">${timeElapsedStr}</span>
+                            <span class="text-[9px] text-gray-400">যোগ: ${item.timeStr || ''}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function updateQueueTimers() {
+            let queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
+            const now = new Date().getTime();
+            queue.forEach((item, index) => {
+                const timerEl = document.getElementById(`timer-${index}`);
+                if (timerEl) {
+                    const diffMs = now - (item.startTime || now);
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffSecs = Math.floor((diffMs % 60000) / 1000);
+                    timerEl.innerText = `${diffMins} মি ${diffSecs} সে`;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
