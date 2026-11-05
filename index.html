@@ -1,4 +1,4 @@
-<web_code_canvas query="Complete bike stand management system with notice board, leadership profiles, permanent rider registry, mandatory photo registration, GPS boundary validation, real-time waiting timer, break trackers for prayer/food with automatic timeout penalty, and Firebase Firestore persistence." storage="FIREBASE" language="HTML">
+<web_code_canvas query="Update Bike Stand Control System so manual serial addition and deletion are available to all users without requiring admin password while keeping all other existing features intact." storage="FIREBASE" language="HTML">
 <!DOCTYPE html>
 <html lang="bn">
 <head>
@@ -105,7 +105,7 @@
             document.getElementById('riderDatabaseList').innerHTML = html || '<p class="text-xs text-gray-400 col-span-2 text-center">কোন রাইডার নিবন্ধিত নেই</p>';
         });
 
-        // ২. সিরিয়ালে যুক্ত হওয়া (অটো বা ম্যানুয়াল) - জিপিএস বাউন্ডারি সাপেক্ষে
+        // ২. সিরিয়ালে যুক্ত হওয়া (অটো বা ম্যানুয়াল) - যেকোনো সাধারণ ইউজার দিতে পারবে
         window.addToSerialQueue = async (type) => {
             const phone = document.getElementById('serialRiderPhone').value.trim();
             if(!phone) { alert('রাইডারের ফোন নম্বর দিন!'); return; }
@@ -242,9 +242,9 @@
                             </button>
                         </div>
 
-                        <!-- ম্যানুয়াল সিরিয়াল কাটার অপশন -->
+                        <!-- ম্যানুয়াল সিরিয়াল কাটার অপশন (যে কেউ ব্রাউজার থেকে কাটতে পারবে) -->
                         ${rider.type === 'manual' ? `
-                            <button onclick="removeManualRider('${rider.phone}')" class="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded text-xs font-bold border border-red-200">
+                            <button onclick="removeManualRider('${rider.phone}')" class="bg-red-50 text-red-600 hover:bg-red-100 px-2.5 py-1 rounded text-xs font-bold border border-red-200">
                                 <i class="fa-solid fa-trash"></i> সিরিয়াল কাটুন
                             </button>
                         ` : ''}
@@ -289,9 +289,9 @@
             alert('ব্রেক চিহ্নিত করা হয়েছে। নির্দিষ্ট সময়ে সিরিয়ালে না ফিরলে সিরিয়াল কেটে যাবে!');
         };
 
-        // ৬. ম্যানুয়াল সিরিয়াল কাটা (অটো কাটার সুযোগ নেই)
+        // ৬. ম্যানুয়াল সিরিয়াল কাটা (যেকোনো সাধারণ রাইডার/ইউজার ম্যানুয়াল সিরিয়াল কাটতে পারবে)
         window.removeManualRider = async (phone) => {
-            if(confirm('আপনি কি ম্যানুয়াল সিরিয়ালটি বাতিল করতে চান?')) {
+            if(confirm('আপনি কি এই ম্যানুয়াল সিরিয়ালটি কাটতে চান?')) {
                 await deleteDoc(doc(db, "active_queue", phone));
             }
         };
@@ -376,7 +376,7 @@
             });
         });
 
-        // অ্যাডমিন এক্সেস কন্ট্রোল
+        // অ্যাডমিন এক্সেস কন্ট্রোল (শুধুমাত্র নোটিশ ও কমিটি কনফিগারের জন্য)
         window.unlockAdmin = () => {
             const pass = document.getElementById('adminPass').value;
             if(pass === "692372") {
@@ -477,12 +477,12 @@
             </section>
         </div>
 
-        <!-- ৫ ও ৬. সিরিয়াল যোগ করার ফর্ম -->
+        <!-- ৫ ও ৬. সিরিয়াল যোগ করার ফর্ম (পাবলিক - যেকোনো রাইডার ম্যানুয়াল/অটো এন্ট্রি দিতে পারবে) -->
         <section class="bg-indigo-900 text-white p-4 rounded-xl shadow-md">
             <h3 class="font-bold text-sm mb-2 flex items-center gap-2">
                 <i class="fa-solid fa-list-check text-amber-400"></i> সিরিয়ালে নাম যুক্ত করুন
             </h3>
-            <p class="text-[11px] text-indigo-200 mb-3">অবশ্যই রাইডারকে স্ট্যান্ডের ২০০ মিটারের ভেতর উপস্থিত থাকতে হবে।</p>
+            <p class="text-[11px] text-indigo-200 mb-3">অবশ্যই রাইডারকে স্ট্যান্ডের ২০০ মিটারের ভেতর উপস্থিত থাকতে হবে। যেকোনো রাইডার ম্যানুয়াল বা অটো সিরিয়াল দিতে পারবেন।</p>
             
             <div class="flex flex-col sm:flex-row gap-2">
                 <input type="tel" id="serialRiderPhone" placeholder="নিবন্ধিত মোবাইল নম্বর দিন" class="p-2 text-xs rounded-lg text-gray-800 flex-1 border-0 focus:ring-2 focus:ring-amber-400">
@@ -499,7 +499,7 @@
         <section class="space-y-3">
             <div class="flex justify-between items-center">
                 <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">
-                    <i class="fa-solid fa-[#000] fa-clock text-indigo-600"></i> লাইভ সিরিয়াল লিস্ট
+                    <i class="fa-solid fa-clock text-indigo-600"></i> লাইভ সিরিয়াল লিস্ট
                 </h3>
                 <span class="text-xs bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full font-bold">
                     সিরিয়ালে উপস্থিত: <span id="queueCount">0</span> জন
@@ -511,11 +511,11 @@
             </div>
         </section>
 
-        <!-- ১১. এডমিন প্যানেল কন্ট্রোল -->
+        <!-- ১১. এডমিন প্যানেল কন্ট্রোল (শুধুমাত্র নোটিশ ও কমিটি ছবি আপডেটের জন্য) -->
         <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <div class="flex justify-between items-center border-b pb-2">
                 <h3 class="font-bold text-gray-800 text-sm flex items-center gap-2">
-                    <i class="fa-solid fa-user-lock text-red-500"></i> এডমিন এলাকা
+                    <i class="fa-solid fa-user-lock text-red-500"></i> এডমিন প্যানেল (নোটিশ ও কমিটি ম্যানেজমেন্ট)
                 </h3>
                 <div class="flex gap-2">
                     <input type="password" id="adminPass" placeholder="পাসওয়ার্ড" class="p-1 text-xs border rounded">
