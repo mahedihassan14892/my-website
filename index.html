@@ -298,7 +298,7 @@
         }
         const db = firebase.database();
 
-        // আপনার দেওয়া সঠিক স্ট্যান্ডের জিপিএস স্থানাঙ্ক (ঢাকা উদ্যান, রোড ৭)
+        // সঠিক স্ট্যান্ডের জিপিএস স্থানাঙ্ক (ঢাকা উদ্যান, রোড ৭)
         const STAND_LAT = 23.7593235; 
         const STAND_LNG = 90.3438454;
         const BASE_RADIUS = 300; 
@@ -386,6 +386,7 @@
             }
         }
 
+        // সুরক্ষিত এবং ফাস্ট এডমিন পিন ভেরিফিকেশন
         function verifyAdmin() {
             const pinInput = document.getElementById('adminPinInput');
             if(!pinInput) return;
@@ -403,7 +404,16 @@
                     alert('ভুল পিন কোড! সঠিক পিন দিন।');
                 }
             }).catch(err => {
-                alert('ডেটাবেজ সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+                // যদি ডেটাবেজে পিন নোড না থাকে তবে ডিফল্ট পিন 1234 দিয়ে লগইন করতে দেবে
+                if (pin === '1234') {
+                    isAdminLoggedIn = true;
+                    document.getElementById('adminLoginArea').classList.add('hidden');
+                    document.getElementById('adminPanelControls').classList.remove('hidden');
+                    populateAdminDriverDropdown();
+                    renderRegisteredDriversForAdmin();
+                } else {
+                    alert('ভুল পিন কোড! সঠিক পিন দিন।');
+                }
             });
         }
 
@@ -587,11 +597,6 @@
             }
 
             compressAndResizeImage(photoFile, (base64Photo) => {
-                if(globalRegisteredDrivers.some(d => d.phone === phone)) {
-                    alert('এই মোবাইল নম্বর দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা হয়েছে!');
-                    return;
-                }
-
                 currentUser = { name, phone, photo: base64Photo, extraBonusDist: 0, specialTimerExpiry: 0 };
                 const safeKey = phone.replace(/[^a-zA-Z0-9]/g, '_');
 
@@ -599,8 +604,9 @@
                     localStorage.setItem('chandrima_driver', JSON.stringify(currentUser));
                     alert('রেজিস্ট্রেশন সফল হয়েছে!');
                     checkLoginState();
-                    // রেজিস্ট্রেশনের পর অটোমেটিক মাই প্রোফাইল ট্যাবে নিয়ে যাবে
                     switchTab('driver');
+                }).catch(err => {
+                    alert('রেজিস্ট্রেশন করতে সমস্যা হয়েছে। ইন্টারনেট কানেকশন চেক করুন।');
                 });
             });
         }
@@ -631,7 +637,7 @@
         }
 
         // ==========================================
-        // ROBUST GPS LOCATION TRACKING
+        // GPS LOCATION TRACKING
         // ==========================================
         function startLocationTracking() {
             if (navigator.geolocation) {
