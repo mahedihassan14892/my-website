@@ -46,7 +46,7 @@
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
-        // ছবি কমপ্রেস করার ফাংশন (ফায়ারবেস সাইজ লিমিট সেভ প্রবলেম ফিক্স)
+        // ছবি কমপ্রেস করার ফাংশন
         function compressImage(file, maxWidth = 300, maxHeight = 300, quality = 0.6) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -146,20 +146,10 @@
             if(selectEl) selectEl.innerHTML = options;
         });
 
-        // ২. সিরিয়ালে যুক্ত হওয়া
+        // ২. সিরিয়ালে যুক্ত হওয়া (আপডেটকৃত: ম্যানুয়ালের জন্য স্ট্যান্ড লোকেশন চেক)
         window.addToSerialQueue = async (type) => {
-            const phone = document.getElementById('serialRiderPhone').value.trim();
-            if(!phone) { alert('রাইডারের ফোন নম্বর দিন!'); return; }
-
-            const riderRef = doc(db, "registered_riders", phone);
-            const riderSnap = await getDoc(riderRef);
-
-            if(!riderSnap.exists()) {
-                alert('এই মোবাইল নম্বরটি নিবন্ধিত নয়! আগে রাইডার রেজিস্ট্রেশন করুন।');
-                return;
-            }
-
-            const riderData = riderSnap.data();
+            const inputVal = document.getElementById('serialRiderPhone').value.trim();
+            if(!inputVal) { alert('রাইডারের তথ্য বা ফোন নম্বর দিন!'); return; }
 
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(async (position) => {
@@ -167,28 +157,62 @@
                     const lng = position.coords.longitude;
                     const dist = calculateDistance(lat, lng, STAND_LAT, STAND_LNG);
 
-                    const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
+                    if (type === 'online') {
+                        const riderRef = doc(db, "registered_riders", inputVal);
+                        const riderSnap = await getDoc(riderRef);
 
-                    if (dist <= maxAllowedDist) {
-                        const nowIso = new Date().toISOString();
-                        await setDoc(doc(db, "active_queue", phone), {
-                            name: riderData.name,
-                            phone: phone,
-                            photo: riderData.photo,
-                            entryTime: nowIso,
-                            type: type,
-                            distance: Math.round(dist),
-                            breakStatus: null,
-                            breakStartTime: null,
-                            prayerCount: 0,
-                            foodCount: 0
-                        });
-                        alert(type === 'online' ? 'অটোমেটিক অনলাইন সিরিয়ালে যুক্ত হয়েছেন!' : 'ম্যানুয়াল সিরিয়ালে যুক্ত করা হয়েছে!');
-                        document.getElementById('serialRiderPhone').value = '';
-                    } else {
-                        alert(`আপনি বা রাইডার নির্ধারিত সীমানার বাইরে আছেন (দূরত্ব: ${Math.round(dist)} মিটার, অনুমতি: ${maxAllowedDist} মিটার)।`);
+                        if(!riderSnap.exists()) {
+                            alert('এই মোবাইল নম্বরটি নিবন্ধিত নয়! আগে রাইডার রেজিস্ট্রেশন করুন।');
+                            return;
+                        }
+
+                        const riderData = riderSnap.data();
+                        const maxAllowedDist = specialLimits[inputVal] ? Number(specialLimits[inputVal]) : DEFAULT_GEOFENCE_LIMIT;
+
+                        if (dist <= maxAllowedDist) {
+                            const nowIso = new Date().toISOString();
+                            await setDoc(doc(db, "active_queue", inputVal), {
+                                name: riderData.name,
+                                phone: inputVal,
+                                photo: riderData.photo,
+                                entryTime: nowIso,
+                                type: type,
+                                distance: Math.round(dist),
+                                breakStatus: null,
+                                breakStartTime: null,
+                                prayerCount: 0,
+                                foodCount: 0
+                            });
+                            alert('অটোমেটিক অনলাইন সিরিয়ালে যুক্ত হয়েছেন!');
+                            document.getElementById('serialRiderPhone').value = '';
+                        } else {
+                            alert(`অনলাইন রাইডার নির্ধারিত সীমানার বাইরে আছেন (দূরত্ব: ${Math.round(dist)} মিটার, অনুমতি: ${maxAllowedDist} মিটার)।`);
+                        }
+
+                    } else if (type === 'manual') {
+                        // ম্যানুয়ালের ক্ষেত্রে অপারেটরকে স্ট্যান্ডের সীমায় (ডিফল্ট ২০০ মি) থাকতে হবে
+                        if (dist <= DEFAULT_GEOFENCE_LIMIT) {
+                            const manualPhone = 'manual_' + Date.now();
+                            const nowIso = new Date().toISOString();
+                            await setDoc(doc(db, "active_queue", manualPhone), {
+                                name: 'ম্যানুয়াল: ' + inputVal,
+                                phone: manualPhone,
+                                photo: 'https://via.placeholder.com/40',
+                                entryTime: nowIso,
+                                type: type,
+                                distance: Math.round(dist),
+                                breakStatus: null,
+                                breakStartTime: null,
+                                prayerCount: 0,
+                                foodCount: 0
+                            });
+                            alert('ম্যানুয়াল সিরিয়ালে সফলভাবে যুক্ত করা হয়েছে!');
+                            document.getElementById('serialRiderPhone').value = '';
+                        } else {
+                            alert(`ম্যানুয়াল সিরিয়াল যুক্ত করতে অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
+                        }
                     }
-                }, () => { alert('সিরিয়াল দেওয়ার জন্য জিপিএস পারমিশন প্রয়োজন!'); }, { enableHighAccuracy: true });
+                }, () => { alert('লোকেশন যাচাইয়ের জন্য জিপিএস পারমিশন প্রয়োজন!'); }, { enableHighAccuracy: true });
             } else {
                 alert('আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।');
             }
@@ -321,10 +345,25 @@
             alert('ব্রেক সেট করা হয়েছে।');
         };
 
-        // ৬. ম্যানুয়াল সিরিয়াল কাটা
+        // ৬. ম্যানুয়াল সিরিয়াল কাটা (আপডেটকৃত: অপারেটরকে স্ট্যান্ডের সীমানায় থাকতে হবে)
         window.removeManualRider = async (phone) => {
-            if(confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) {
-                await deleteDoc(doc(db, "active_queue", phone));
+            if(!confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) return;
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const dist = calculateDistance(lat, lng, STAND_LAT, STAND_LNG);
+
+                    if (dist <= DEFAULT_GEOFENCE_LIMIT) {
+                        await deleteDoc(doc(db, "active_queue", phone));
+                        alert('সিরিয়ালটি সফলভাবে কেটে দেওয়া হয়েছে।');
+                    } else {
+                        alert(`সিরিয়াল কাটার জন্য অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
+                    }
+                }, () => { alert('লোকেশন যাচাইয়ের জন্য জিপিএস পারমিশন প্রয়োজন!'); }, { enableHighAccuracy: true });
+            } else {
+                alert('আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।');
             }
         };
 
@@ -379,21 +418,23 @@
 
         // ৮. কমিটি
         window.updateLeaderProfile = async (role) => {
-            const name = document.getElementById(`${role}Name`).value.trim();
+            const nameEl = document.getElementById(`${role}Name`);
             const fileInput = document.getElementById(`${role}Photo`);
 
-            if(!name) { alert('নাম দিন!'); return; }
+            if(!nameEl || !nameEl.value.trim()) { alert('নাম দিন!'); return; }
 
             let photoBase64 = null;
             if(fileInput.files[0]) {
                 photoBase64 = await compressImage(fileInput.files[0]);
             }
 
-            const payload = { name };
+            const payload = { name: nameEl.value.trim() };
             if(photoBase64) payload.photo = photoBase64;
 
             await setDoc(doc(db, "committee", role), payload, { merge: true });
             alert('কমিটি আপডেট সফল!');
+            nameEl.value = '';
+            fileInput.value = '';
         };
 
         ['president', 'vicePresident', 'organizingSec'].forEach(role => {
@@ -521,10 +562,10 @@
             <h3 class="font-bold text-sm mb-2 flex items-center gap-2">
                 <i class="fa-solid fa-list-check text-amber-400"></i> সিরিয়ালে নাম যুক্ত করুন
             </h3>
-            <p class="text-[11px] text-indigo-200 mb-3">অবশ্যই রাইডারকে সীমানার ভেতর উপস্থিত থাকতে হবে। যেকোনো রাইডার ম্যানুয়াল বা অটো সিরিয়াল দিতে পারবেন।</p>
+            <p class="text-[11px] text-indigo-200 mb-3">অনলাইন রাইডার ও ম্যানুয়াল অপারেটরকে অবশ্যই নিজস্ব সীমানার ভেতর উপস্থিত থাকতে হবে।</p>
             
             <div class="flex flex-col sm:flex-row gap-2">
-                <input type="tel" id="serialRiderPhone" placeholder="নিবন্ধিত মোবাইল নম্বর দিন" class="p-2 text-xs rounded-lg text-gray-800 flex-1 border-0 focus:ring-2 focus:ring-amber-400">
+                <input type="text" id="serialRiderPhone" placeholder="মোবাইল নম্বর বা রাইডারের নাম" class="p-2 text-xs rounded-lg text-gray-800 flex-1 border-0 focus:ring-2 focus:ring-amber-400">
                 <button onclick="addToSerialQueue('online')" class="bg-amber-500 hover:bg-amber-600 text-slate-900 px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1">
                     <i class="fa-solid fa-wifi"></i> অটো (অনলাইন)
                 </button>
