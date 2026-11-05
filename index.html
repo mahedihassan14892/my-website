@@ -276,7 +276,7 @@
     <!-- JavaScript Application Logic with Firebase & Fixed GPS Integration -->
     <script>
         // ==========================================
-        // FIREBASE CONFIGURATION (ফায়ারবেস কনফিগারেশন বসান)
+        // FIREBASE CONFIGURATION (ফায়ারবেস কনফিগারেশন)
         // ==========================================
         const firebaseConfig = {
             apiKey: "YOUR_FIREBASE_API_KEY",
@@ -289,10 +289,12 @@
         };
 
         // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
         const db = firebase.database();
 
-        // সঠিক স্ট্যান্ডের জিপিএস স্থানাঙ্ক (ঢাকা উদ্যান, রোড ৭)
+        // আপনার দেওয়া সঠিক স্ট্যান্ডের জিপিএস স্থানাঙ্ক (ঢাকা উদ্যান, রোড ৭)
         const STAND_LAT = 23.7593235; 
         const STAND_LNG = 90.3438454;
         const BASE_RADIUS = 300; 
@@ -313,7 +315,6 @@
             initFirebaseListeners();
             checkLoginState();
             startLocationTracking();
-            setInterval(updateQueueTimers, 1000);
         });
 
         function initFirebaseListeners() {
@@ -427,3 +428,442 @@
                 };
 
                 if(presFile) {
+                    pendingImages++;
+                    compressAndResizeImage(presFile, (base64) => { committee.presPhoto = base64; checkDone(); });
+                }
+                if(vpFile) {
+                    pendingImages++;
+                    compressAndResizeImage(vpFile, (base64) => { committee.vpPhoto = base64; checkDone(); });
+                }
+                if(orgFile) {
+                    pendingImages++;
+                    compressAndResizeImage(orgFile, (base64) => { committee.orgPhoto = base64; checkDone(); });
+                }
+
+                if(pendingImages === 0) {
+                    db.ref('chandrima_committee').set(committee).then(() => {
+                        alert('কমিটির তথ্য সফলভাবে আপডেট করা হয়েছে!');
+                        toggleAdminModal();
+                    });
+                }
+            });
+        }
+
+        function renderRegisteredDriversForAdmin() {
+            const countEl = document.getElementById('adminTotalRegisteredCount');
+            const container = document.getElementById('registeredDriversContainer');
+            if(countEl) countEl.innerText = `${globalRegisteredDrivers.length} জন`;
+
+            if(container) {
+                if(globalRegisteredDrivers.length === 0) {
+                    container.innerHTML = `<p class="text-center text-gray-500 py-2 text-[11px]">এখনো কোনো রাইডার রেজিস্টার্ড হয়নি।</p>`;
+                    return;
+                }
+                let html = '';
+                globalRegisteredDrivers.forEach((d, idx) => {
+                    let avatar = d.photo ? `<img src="${d.photo}" class="w-7 h-7 rounded-full object-cover border border-blue-500">` : `<i class="fa-solid fa-user-circle text-gray-400 text-lg"></i>`;
+                    html += `
+                        <div class="flex items-center justify-between bg-white p-2 rounded shadow-sm border border-gray-200">
+                            <div class="flex items-center space-x-2">
+                                ${avatar}
+                                <div>
+                                    <p class="font-bold text-gray-800 text-[11px]">${idx + 1}. ${d.name}</p>
+                                    <p class="text-[10px] text-gray-500">${d.phone}</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+            }
+        }
+
+        function toggleRegisteredDriversList() {
+            document.getElementById('registeredDriversContainer').classList.toggle('hidden');
+        }
+
+        function populateAdminDriverDropdown() {
+            const selectTarget = document.getElementById('adminTargetPhone');
+            let html = '<option value="">রাইডার নির্বাচন করুন</option>';
+            globalRegisteredDrivers.forEach(d => {
+                html += `<option value="${d.phone}">${d.name} (${d.phone})</option>`;
+            });
+            if(selectTarget) selectTarget.innerHTML = html;
+        }
+
+        function applyAdminOverrides() {
+            const phone = document.getElementById('adminTargetPhone').value;
+            const extraInput = document.getElementById('adminExtraDist').value;
+            const minsInput = document.getElementById('adminSpecialMins').value;
+
+            if(!phone) {
+                alert('দয়া করে একজন রাইডার সিলেক্ট করুন!');
+                return;
+            }
+
+            let extraDist = extraInput !== "" ? parseInt(extraInput) || 0 : 0;
+            let specialExpiry = minsInput !== "" ? new Date().getTime() + ((parseInt(minsInput) || 0) * 60000) : 0;
+            let safeKey = phone.replace(/[^a-zA-Z0-9]/g, '_');
+
+            db.ref(`chandrima_registered_drivers/${safeKey}`).update({ extraBonusDist: extraDist, specialTimerExpiry: specialExpiry });
+            db.ref(`chandrima_queue/${safeKey}`).update({ extraBonusDist: extraDist, specialTimerExpiry: specialExpiry });
+
+            alert(`রাইডার-এর জন্য পার্সোনাল দূরত্ব ও স্পেশাল সময় সফলভাবে সেট করা হয়েছে!`);
+            toggleAdminModal();
+        }
+
+        function changeAdminPin() {
+            const newPin = document.getElementById('newAdminPin').value.trim();
+            if (newPin.length >= 4) {
+                db.ref('chandrima_admin_pin').set(newPin).then(() => {
+                    alert('এডমিন পিন সফলভাবে পরিবর্তন করা হয়েছে!');
+                    document.getElementById('newAdminPin').value = '';
+                });
+            } else {
+                alert('কমপক্ষে ৪ সংখ্যার পিন দিন!');
+            }
+        }
+
+        function updateNotice() {
+            const newNotice = document.getElementById('adminNoticeInput').value.trim();
+            if (newNotice) {
+                db.ref('chandrima_notice').set(newNotice).then(() => {
+                    alert('নোটিশ সফলভাবে আপডেট হয়েছে!');
+                    toggleAdminModal();
+                });
+            }
+        }
+
+        function resetQueue() {
+            if(confirm('আপনি কি নিশ্চিতভাবে আজকের সম্পূর্ণ সিরিয়াল রিসেট করতে চান?')) {
+                db.ref('chandrima_queue').remove().then(() => {
+                    alert('সিরিয়াল সফলভাবে খালি করা হয়েছে!');
+                });
+            }
+        }
+
+        function compressAndResizeImage(file, callback) {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = function (event) {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = function () {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 80;
+                    const MAX_HEIGHT = 80;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                    } else {
+                        if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    callback(canvas.toDataURL('image/jpeg', 0.5));
+                }
+            }
+        }
+
+        function handleRegistration(e) {
+            e.preventDefault();
+            const name = document.getElementById('regName').value.trim();
+            const phone = document.getElementById('regPhone').value.trim();
+            const photoFile = document.getElementById('regPhoto').files[0];
+
+            if (!name || !phone || !photoFile) {
+                alert('সকল তথ্য এবং ছবি বাধ্যতামূলক!');
+                return;
+            }
+
+            compressAndResizeImage(photoFile, (base64Photo) => {
+                if(globalRegisteredDrivers.some(d => d.phone === phone)) {
+                    alert('এই মোবাইল নম্বর দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা হয়েছে!');
+                    return;
+                }
+
+                currentUser = { name, phone, photo: base64Photo, extraBonusDist: 0, specialTimerExpiry: 0 };
+                const safeKey = phone.replace(/[^a-zA-Z0-9]/g, '_');
+
+                db.ref(`chandrima_registered_drivers/${safeKey}`).set(currentUser).then(() => {
+                    localStorage.setItem('chandrima_driver', JSON.stringify(currentUser));
+                    alert('রেজিস্ট্রেশন সফল হয়েছে!');
+                    checkLoginState();
+                });
+            });
+        }
+
+        function checkLoginState() {
+            const regBox = document.getElementById('registrationBox');
+            const statusBox = document.getElementById('driverStatusBox');
+
+            if (currentUser) {
+                regBox.classList.add('hidden');
+                statusBox.classList.remove('hidden');
+                document.getElementById('profileName').innerText = currentUser.name;
+                document.getElementById('profilePhone').innerText = currentUser.phone;
+                document.getElementById('profileImg').src = currentUser.photo || 'https://via.placeholder.com/80?text=User';
+            } else {
+                regBox.classList.remove('hidden');
+                statusBox.classList.add('hidden');
+            }
+        }
+
+        function logoutDriver() {
+            if(confirm('লগআউট করতে চান?')) {
+                localStorage.removeItem('chandrima_driver');
+                currentUser = null;
+                checkLoginState();
+                renderDriverAction(isWithinCurrentStand);
+            }
+        }
+
+        // ==========================================
+        // FIXED GPS LOCATION TRACKING (লোকেশন ও পারমিশন ফিক্স)
+        // ==========================================
+        function startLocationTracking() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        handlePosition(position);
+                        navigator.geolocation.watchPosition(handlePosition, handleGeoError, {
+                            enableHighAccuracy: true,
+                            maximumAge: 3000,
+                            timeout: 15000
+                        });
+                    },
+                    handleGeoError,
+                    { enableHighAccuracy: true, timeout: 15000 }
+                );
+            } else {
+                const distEl = document.getElementById('profileDistance');
+                if(distEl) distEl.innerText = 'জিপিএস সমর্থিত নয়';
+            }
+        }
+
+        function handlePosition(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            calculateDistanceAndHandleStand(lat, lng);
+        }
+
+        function handleGeoError(error) {
+            const distEl = document.getElementById('profileDistance');
+            if(distEl) distEl.innerText = 'লোকেশন পারমিশন দিন';
+            const manualMsg = document.getElementById('manualPermissionMsg');
+            if(manualMsg) manualMsg.innerText = '⚠️ জিপিএস পারমিশন ব্লক করা আছে। দয়া করে ব্রাউজার সেটিংস থেকে লোকেশন পারমিশন Allow করুন।';
+        }
+
+        function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
+            const R = 6371000;
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        }
+
+        function deg2rad(deg) { return deg * (Math.PI / 180); }
+
+        function calculateDistanceAndHandleStand(lat, lng) {
+            const distance = getDistanceFromLatLonInMeters(lat, lng, STAND_LAT, STAND_LNG);
+            const distEl = document.getElementById('profileDistance');
+            
+            let extraDist = 0;
+            if (currentUser) {
+                let found = globalRegisteredDrivers.find(d => d.phone === currentUser.phone);
+                if (found && found.extraBonusDist) extraDist = found.extraBonusDist;
+            }
+
+            const allowedRadius = BASE_RADIUS + extraDist;
+            if (distEl) {
+                distEl.innerText = `${Math.round(distance)} মিটার (${distance <= allowedRadius ? 'স্ট্যান্ডের ভেতরে' : 'বাইরে'})`;
+            }
+
+            isWithinCurrentStand = distance <= allowedRadius;
+
+            const manualMsg = document.getElementById('manualPermissionMsg');
+            const manualForm = document.getElementById('manualFormArea');
+            if (manualMsg && manualForm) {
+                if (isWithinCurrentStand) {
+                    manualMsg.innerText = '✅ আপনি স্ট্যান্ডের ভেতরে আছেন। ম্যানুয়াল এন্ট্রি করতে পারেন।';
+                    manualForm.classList.remove('hidden');
+                } else {
+                    manualMsg.innerText = `❌ আপনি স্ট্যান্ড থেকে দূরে আছেন (${Math.round(distance)} মি)। ম্যানুয়াল এন্ট্রির জন্য ${allowedRadius} মিটারের মধ্যে থাকতে হবে।`;
+                    manualForm.classList.add('hidden');
+                }
+            }
+
+            renderDriverAction(isWithinCurrentStand);
+        }
+
+        function renderDriverAction(inStand) {
+            const actionArea = document.getElementById('standActionArea');
+            const breakSec = document.getElementById('breakSection');
+            if (!currentUser || !actionArea) return;
+
+            let inQueue = globalQueue.find(q => q.phone === currentUser.phone);
+
+            if (inQueue) {
+                actionArea.innerHTML = `
+                    <div class="bg-green-50 p-2.5 rounded border border-green-200 text-center space-y-1">
+                        <p class="text-green-800 font-bold">আপনি বর্তমানে সিরিয়ালে আছেন (#${inQueue.serialNumber})</p>
+                        <button onclick="leaveQueue()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold w-full cursor-pointer transition">
+                            স্ট্যান্ড ছাড়ুন / বিরতিতে যান
+                        </button>
+                    </div>
+                `;
+                if(breakSec) breakSec.classList.remove('hidden');
+            } else {
+                if(breakSec) breakSec.classList.add('hidden');
+                if (inStand) {
+                    actionArea.innerHTML = `
+                        <button onclick="joinQueue()" class="bg-green-600 hover:bg-green-700 text-white p-2 rounded text-xs font-bold w-full shadow cursor-pointer transition">
+                            স্ট্যান্ডে উপস্থিত - সিরিয়ালে নাম তুলুন
+                        </button>
+                    `;
+                } else {
+                    actionArea.innerHTML = `
+                        <p class="text-gray-500 text-center italic text-xs">স্ট্যান্ডের সীমানার বাইরে থাকায় স্বয়ংক্রিয় সিরিয়ালে যুক্ত হতে পারছেন না।</p>
+                    `;
+                }
+            }
+        }
+
+        function joinQueue() {
+            if (!currentUser) return;
+            if(globalQueue.some(q => q.phone === currentUser.phone)) return;
+
+            const newSerial = globalQueue.length + 1;
+            const queueItem = {
+                name: currentUser.name,
+                phone: currentUser.phone,
+                photo: currentUser.photo,
+                serialNumber: newSerial,
+                joinTime: firebase.database.ServerValue.TIMESTAMP,
+                status: 'active'
+            };
+
+            const safeKey = currentUser.phone.replace(/[^a-zA-Z0-9]/g, '_');
+            db.ref(`chandrima_queue/${safeKey}`).set(queueItem);
+        }
+
+        function leaveQueue() {
+            if (!currentUser) return;
+            const safeKey = currentUser.phone.replace(/[^a-zA-Z0-9]/g, '_');
+            
+            db.ref(`chandrima_queue/${safeKey}`).remove().then(() => {
+                setTimeout(() => {
+                    db.ref('chandrima_queue').once('value').then((snapshot) => {
+                        let qData = snapshot.val();
+                        if (qData) {
+                            let list = Object.values(qData);
+                            let updates = {};
+                            list.forEach((item, idx) => {
+                                let key = item.phone.replace(/[^a-zA-Z0-9]/g, '_');
+                                updates[`${key}/serialNumber`] = idx + 1;
+                            });
+                            db.ref('chandrima_queue').update(updates);
+                        }
+                    });
+                }, 300);
+            });
+            const breakSec = document.getElementById('breakSection');
+            if(breakSec) breakSec.classList.add('hidden');
+        }
+
+        function markLeaveReason() {
+            const reason = document.getElementById('leaveReason').value;
+            alert(`আপনার বিরতির কারণ (${reason}) সফলভাবে রেকর্ড করা হয়েছে।`);
+            leaveQueue();
+        }
+
+        function submitManualEntry() {
+            const name = document.getElementById('manualNameInput').value.trim();
+            const phone = document.getElementById('manualPhoneInput').value.trim();
+            const photoFile = document.getElementById('manualPhotoInput').files[0];
+
+            if (!name || !phone) {
+                alert('নাম এবং মোবাইল নম্বর দিন!');
+                return;
+            }
+
+            const proceedWithData = (photoUrl) => {
+                if(globalQueue.some(q => q.phone === phone)) {
+                    alert('এই নম্বরটি ইতিমধ্যে সিরিয়ালে আছে!');
+                    return;
+                }
+                const newSerial = globalQueue.length + 1;
+                const queueItem = {
+                    name: name,
+                    phone: phone,
+                    photo: photoUrl || 'https://via.placeholder.com/80?text=User',
+                    serialNumber: newSerial,
+                    joinTime: firebase.database.ServerValue.TIMESTAMP,
+                    status: 'active'
+                };
+                const safeKey = phone.replace(/[^a-zA-Z0-9]/g, '_');
+                db.ref(`chandrima_queue/${safeKey}`).set(queueItem).then(() => {
+                    alert('ম্যানুয়াল সিরিয়াল সফলভাবে যুক্ত করা হয়েছে!');
+                    document.getElementById('manualNameInput').value = '';
+                    document.getElementById('manualPhoneInput').value = '';
+                    document.getElementById('manualPhotoInput').value = '';
+                });
+            };
+
+            if (photoFile) {
+                compressAndResizeImage(photoFile, (base64) => {
+                    proceedWithData(base64);
+                });
+            } else {
+                proceedWithData('');
+            }
+        }
+
+        function renderQueueData() {
+            const container = document.getElementById('queueListContainer');
+            const totalStandEl = document.getElementById('totalInStand');
+            const totalQueueEl = document.getElementById('totalInQueue');
+
+            if (!container) return;
+
+            if (totalStandEl) totalStandEl.innerText = globalQueue.length;
+            if (totalQueueEl) totalQueueEl.innerText = globalQueue.length;
+
+            if (globalQueue.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-gray-400 text-sm bg-white rounded-lg shadow-sm">বর্তমানে সিরিয়ালে কেউ নেই।</div>`;
+                return;
+            }
+
+            // সিরিয়াল নম্বর অনুযায়ী সাজানো
+            globalQueue.sort((a, b) => a.serialNumber - b.serialNumber);
+
+            let html = '';
+            globalQueue.forEach((item, index) => {
+                let badgeColor = index === 0 ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-800';
+                let avatar = item.photo ? `<img src="${item.photo}" class="w-10 h-10 rounded-full object-cover border border-green-600">` : `<i class="fa-solid fa-user-circle text-gray-400 text-2xl"></i>`;
+                
+                html += `
+                    <div class="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between border border-gray-100">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${badgeColor}">
+                                ${item.serialNumber || index + 1}
+                            </div>
+                            ${avatar}
+                            <div>
+                                <h4 class="font-bold text-gray-800 text-xs">${item.name}</h4>
+                                <p class="text-[10px] text-gray-500"><i class="fa-solid fa-phone mr-1"></i>${item.phone}</p>
+                            </div>
+                        </div>
+                        <span class="text-[10px] bg-green-50 text-green-700 px-2 py-1 rounded font-semibold border border-green-200">অপেক্ষমাণ</span>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
