@@ -1,3 +1,4 @@
+<web_code_canvas query="Complete bike stand management system with notice board, leadership profiles, permanent rider registry, mandatory photo registration, GPS boundary validation, real-time waiting timer, break trackers for prayer/food with automatic timeout penalty, and Firebase Firestore persistence." storage="FIREBASE" language="HTML">
 <!DOCTYPE html>
 <html lang="bn">
 <head>
@@ -5,10 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>বাইক স্ট্যান্ড কন্ট্রোল সিস্টেম</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { 
+            getFirestore, doc, setDoc, getDoc, onSnapshot, collection, deleteDoc, updateDoc, serverTimestamp 
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+        // আপনার ফায়ারবেস কনফিগ
         const firebaseConfig = {
             apiKey: "AIzaSyBD2x5i_3hzPuLSIo88llk3-DVuG09S5_c",
             authDomain: "chandrima-stand.firebaseapp.com",
@@ -21,11 +26,16 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // স্ট্যান্ডের কনফিগারেশন
+        // স্ট্যান্ড জিপিএস অবস্থান ও সীমা (মিটার)
         const STAND_LAT = 23.7593235;
         const STAND_LNG = 90.3438454;
         const GEOFENCE_LIMIT = 200;
 
+        // গ্লোবাল স্টেট
+        let activeQueue = [];
+        let timerInterval = null;
+
+        // জিপিএস দূরত্ব হিসাবের ফাংশন
         function calculateDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
             const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -36,10 +46,80 @@
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
-        window.registerRider = async (type) => {
-            const name = document.getElementById('riderName').value;
-            const phone = document.getElementById('riderPhone').value;
-            if(!name || !phone) { alert('নাম ও ফোন নম্বর দিন'); return; }
+        // ছবিকে Base64 টেক্সটে রূপান্তর করার জন্য হেলপার
+        function convertImageToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // ১. রাইডার স্থায়ী রেজিস্ট্রেশন (বাধ্যতামূলক ছবি, নাম, ফোন)
+        window.registerPermanentRider = async () => {
+            const name = document.getElementById('regName').value.trim();
+            const phone = document.getElementById('regPhone').value.trim();
+            const fileInput = document.getElementById('regPhoto');
+
+            if(!name || !phone || !fileInput.files[0]) {
+                alert('অনুরোধ নিশ্চিত করতে নাম, মোবাইল নম্বর এবং ছবি প্রদান করা বাধ্যতামূলক!');
+                return;
+            }
+
+            try {
+                const photoBase64 = await convertImageToBase64(fileInput.files[0]);
+                await setDoc(doc(db, "registered_riders", phone), {
+                    name,
+                    phone,
+                    photo: photoBase64,
+                    registeredAt: new Date().toISOString()
+                });
+                alert('স্থায়ী রাইডার রেজিস্ট্রেশন সফল হয়েছে!');
+                document.getElementById('regName').value = '';
+                document.getElementById('regPhone').value = '';
+                fileInput.value = '';
+            } catch(e) {
+                console.error(e);
+                alert('রেজিস্ট্রেশন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+            }
+        };
+
+        // নিবন্ধিত রাইডারদের তালিকা সরাসরি ফেচ করা (কখনো ডিলিট হবে না)
+        onSnapshot(collection(db, "registered_riders"), (snapshot) => {
+            let html = '';
+            let total = 0;
+            snapshot.forEach((docSnap) => {
+                total++;
+                const data = docSnap.data();
+                html += `
+                <div class="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border border-slate-200">
+                    <img src="${data.photo || 'https://via.placeholder.com/50'}" class="w-10 h-10 rounded-full object-cover border">
+                    <div class="overflow-hidden">
+                        <p class="font-bold text-xs text-gray-800 truncate">${data.name}</p>
+                        <p class="text-[11px] text-gray-500">${data.phone}</p>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('totalRegisteredCount').innerText = total;
+            document.getElementById('riderDatabaseList').innerHTML = html || '<p class="text-xs text-gray-400 col-span-2 text-center">কোন রাইডার নিবন্ধিত নেই</p>';
+        });
+
+        // ২. সিরিয়ালে যুক্ত হওয়া (অটো বা ম্যানুয়াল) - জিপিএস বাউন্ডারি সাপেক্ষে
+        window.addToSerialQueue = async (type) => {
+            const phone = document.getElementById('serialRiderPhone').value.trim();
+            if(!phone) { alert('রাইডারের ফোন নম্বর দিন!'); return; }
+
+            // স্থায়ী ডাটাবেজে রাইডার আছে কিনা চেক
+            const riderRef = doc(db, "registered_riders", phone);
+            const riderSnap = await getDoc(riderRef);
+
+            if(!riderSnap.exists()) {
+                alert('এই মোবাইল নম্বরটি নিবন্ধিত নয়! আগে নিচে রাইডার রেজিস্ট্রেশন করুন।');
+                return;
+            }
+
+            const riderData = riderSnap.data();
 
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(async (position) => {
@@ -47,78 +127,449 @@
                     const lng = position.coords.longitude;
                     const dist = calculateDistance(lat, lng, STAND_LAT, STAND_LNG);
 
-                    if(dist <= GEOFENCE_LIMIT || type === 'manual') {
-                        await setDoc(doc(db, "riders", phone), {
-                            name, phone, status: 'in', entryTime: new Date().toISOString(), type: type, distance: dist.toFixed(2)
+                    if (dist <= GEOFENCE_LIMIT) {
+                        const nowIso = new Date().toISOString();
+                        await setDoc(doc(db, "active_queue", phone), {
+                            name: riderData.name,
+                            phone: phone,
+                            photo: riderData.photo,
+                            entryTime: nowIso,
+                            type: type, // 'online' অথবা 'manual'
+                            distance: Math.round(dist),
+                            breakStatus: null, // 'prayer' or 'food'
+                            breakStartTime: null,
+                            prayerCount: 0,
+                            foodCount: 0
                         });
-                        alert(type === 'auto' ? 'অটো সিরিয়ালে যুক্ত হয়েছেন!' : 'ম্যানুয়াল সিরিয়ালে যুক্ত হয়েছেন!');
+                        alert(type === 'online' ? 'অটোমেটিক অনলাইন সিরিয়ালে যুক্ত হয়েছেন!' : 'ম্যানুয়াল সিরিয়ালে যুক্ত করা হয়েছে!');
+                        document.getElementById('serialRiderPhone').value = '';
                     } else {
-                        alert('আপনি স্ট্যান্ডের ২০০ মিটার সীমানার বাইরে আছেন।');
+                        alert(`আপনি বা রাইডার স্ট্যান্ডের ২০০ মিটার সীমানার বাইরে আছেন (দূরত্ব: ${Math.round(dist)} মিটার)। সীমানার ভেতরে থেকে সিরিয়াল দিন।`);
                     }
-                }, () => { alert('লোকেশন পারমিশন আবশ্যক।'); });
+                }, () => { alert('সিরিয়াল দেওয়ার জন্য জিপিএস/লোকেশন পারমিশন বাধ্যতামূলক!'); }, { enableHighAccuracy: true });
             } else {
-                alert('আপনার ব্রাউজার লোকেশন সাপোর্ট করে না।');
+                alert('আপনার ডিভাইসে জিপিএস লোকেশন সাপোর্ট করে না।');
             }
         };
 
-        onSnapshot(collection(db, "riders"), (snapshot) => {
-            let html = '';
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                html += `<div class="p-4 border-b flex justify-between items-center bg-white mb-2 shadow-sm rounded">
-                    <div>
-                        <h4 class="font-bold">${data.name}</h4>
-                        <p class="text-sm text-gray-500">${data.phone} (${data.type === 'auto' ? 'অটো' : 'ম্যানুয়াল'})</p>
-                    </div>
-                    <span class="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">সিরিয়ালে আছেন</span>
-                </div>`;
+        // ৩. সিরিয়াল তালিকা রিয়েলটাইম শুনো
+        onSnapshot(collection(db, "active_queue"), (snapshot) => {
+            activeQueue = [];
+            snapshot.forEach((docSnap) => {
+                activeQueue.push({ id: docSnap.id, ...docSnap.data() });
             });
-            document.getElementById('serialList').innerHTML = html;
+
+            // এন্ট্রি টাইম অনুযায়ী সাজানো (ক্রমানুসারে)
+            activeQueue.sort((a, b) => new Date(a.entryTime) - new Date(b.entryTime));
+            
+            document.getElementById('queueCount').innerText = activeQueue.length;
+            renderQueueUI();
         });
 
-        window.runAdminAction = () => {
+        // ৪. ওয়েটিং টাইম কাউন্টডাউন এবং ব্রেক অটো-ক্যান্সেল চেকার
+        function renderQueueUI() {
+            const container = document.getElementById('activeQueueList');
+            if(activeQueue.length === 0) {
+                container.innerHTML = '<div class="p-6 text-center text-gray-400 bg-white rounded-xl shadow-sm">বর্তমানে সিরিয়ালে কেউ নেই</div>';
+                return;
+            }
+
+            const now = new Date();
+            let html = '';
+
+            activeQueue.forEach((rider, index) => {
+                const entry = new Date(rider.entryTime);
+                const diffMs = now - entry;
+                
+                // সময় হিসাব
+                const totalSec = Math.floor(diffMs / 1000);
+                const hrs = Math.floor(totalSec / 3600);
+                const mins = Math.floor((totalSec % 3600) / 60);
+                const secs = totalSec % 60;
+                const timeStr = `${hrs > 0 ? hrs + 'ঘণ্টা ' : ''}${mins}মি. ${secs}সে.`;
+
+                // ব্রেক স্টেট চেক
+                let breakBadge = '';
+                if(rider.breakStatus) {
+                    const breakStart = new Date(rider.breakStartTime);
+                    const elapsedMins = Math.floor((now - breakStart) / 60000);
+                    const maxAllowed = rider.breakStatus === 'prayer' ? 50 : 30; // ৫০ মিনিট নামাজ, ৩০ মিনিট খাবার
+
+                    // যদি অতিরিক্ত সময় হয়ে যায়, স্বয়ংক্রিয়ভাবে সিরিয়াল কেটে যাবে
+                    if(elapsedMins >= maxAllowed) {
+                        deleteDoc(doc(db, "active_queue", rider.phone));
+                        return;
+                    }
+
+                    const remainingMins = maxAllowed - elapsedMins;
+                    breakBadge = `<div class="mt-1 text-xs font-bold ${rider.breakStatus === 'prayer' ? 'text-emerald-600' : 'text-amber-600'}">
+                        <i class="fa-solid fa-clock-rotate-left"></i> ${rider.breakStatus === 'prayer' ? 'নামাজের ব্রেক' : 'খাবারের ব্রেক'} (অবশিষ্ট: ${remainingMins} মি.)
+                    </div>`;
+                }
+
+                html += `
+                <div class="p-3 bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm">
+                            ${index + 1}
+                        </div>
+                        <img src="${rider.photo || 'https://via.placeholder.com/40'}" class="w-12 h-12 rounded-full object-cover border">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h4 class="font-bold text-gray-800 text-sm">${rider.name}</h4>
+                                <span class="px-2 py-0.5 text-[10px] font-bold rounded ${rider.type === 'online' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}">
+                                    ${rider.type === 'online' ? 'অনলাইন (অটো)' : 'অফলাইন (ম্যানুয়াল)'}
+                                </span>
+                            </div>
+                            <p class="text-xs text-gray-500">${rider.phone}</p>
+                            ${breakBadge}
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-2 md:pt-0">
+                        <div class="text-left md:text-right">
+                            <p class="text-[10px] text-gray-400">অপেক্ষার সময়</p>
+                            <p class="text-xs font-mono font-bold text-indigo-600">${timeStr}</p>
+                        </div>
+
+                        <!-- ব্রেক বাটন্স -->
+                        <div class="flex gap-1">
+                            <button onclick="takeBreak('${rider.phone}', 'prayer')" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded text-[11px] font-semibold border border-emerald-200">
+                                <i class="fa-solid fa-mosque"></i> নামাজ (৫০মি)
+                            </button>
+                            <button onclick="takeBreak('${rider.phone}', 'food')" class="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2 py-1 rounded text-[11px] font-semibold border border-amber-200">
+                                <i class="fa-solid fa-utensils"></i> খাবার (৩০মি)
+                            </button>
+                        </div>
+
+                        <!-- ম্যানুয়াল সিরিয়াল কাটার অপশন -->
+                        ${rider.type === 'manual' ? `
+                            <button onclick="removeManualRider('${rider.phone}')" class="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded text-xs font-bold border border-red-200">
+                                <i class="fa-solid fa-trash"></i> সিরিয়াল কাটুন
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // রিয়েলটাইম টাইমার চালনা (প্রতি সেকেন্ডে সময় রিফ্রেশ)
+        if(!timerInterval) {
+            timerInterval = setInterval(() => {
+                if(activeQueue.length > 0) renderQueueUI();
+            }, 1000);
+        }
+
+        // ৫. ব্রেকে যাওয়ার ফাংশন (কন্ডিশন: নামাজ ৩ বার, খাবার ১ বার)
+        window.takeBreak = async (phone, type) => {
+            const docRef = doc(db, "active_queue", phone);
+            const docSnap = await getDoc(docRef);
+            if(!docSnap.exists()) return;
+
+            const data = docSnap.data();
+            let prayerCount = data.prayerCount || 0;
+            let foodCount = data.foodCount || 0;
+
+            if(type === 'prayer') {
+                if(prayerCount >= 3) { alert('আজকের দিনের জন্য সর্বোচ্চ ৩ বার নামাজের ব্রেক শেষ হয়ে গেছে!'); return; }
+                prayerCount++;
+            } else if(type === 'food') {
+                if(foodCount >= 1) { alert('আজকের দিনের জন্য ১ বার খাবারের ব্রেক শেষ হয়ে গেছে!'); return; }
+                foodCount++;
+            }
+
+            await updateDoc(docRef, {
+                breakStatus: type,
+                breakStartTime: new Date().toISOString(),
+                prayerCount,
+                foodCount
+            });
+            alert('ব্রেক চিহ্নিত করা হয়েছে। নির্দিষ্ট সময়ে সিরিয়ালে না ফিরলে সিরিয়াল কেটে যাবে!');
+        };
+
+        // ৬. ম্যানুয়াল সিরিয়াল কাটা (অটো কাটার সুযোগ নেই)
+        window.removeManualRider = async (phone) => {
+            if(confirm('আপনি কি ম্যানুয়াল সিরিয়ালটি বাতিল করতে চান?')) {
+                await deleteDoc(doc(db, "active_queue", phone));
+            }
+        };
+
+        // ৭. নোটিশ বোর্ড অ্যাডমিন আপডেট (কমপ্লেইন/রেড বা নর্মাল/ব্ল্যাক)
+        window.updateNoticeBoard = async () => {
+            const text = document.getElementById('adminNoticeText').value.trim();
+            const color = document.getElementById('adminNoticeColor').value;
+            const photoInput = document.getElementById('adminNoticePhoto');
+
+            if(!text) { alert('নোটিশের তথ্য লিখুন!'); return; }
+
+            let photoBase64 = null;
+            if(photoInput.files[0]) {
+                photoBase64 = await convertImageToBase64(photoInput.files[0]);
+            }
+
+            await setDoc(doc(db, "settings", "notice"), {
+                text,
+                color, // 'black' বা 'red'
+                photo: photoBase64,
+                updatedAt: new Date().toISOString()
+            });
+
+            alert('নোটিশ পাবলিশ করা হয়েছে!');
+            document.getElementById('adminNoticeText').value = '';
+            photoInput.value = '';
+        };
+
+        // নোটিশ শোনা
+        onSnapshot(doc(db, "settings", "notice"), (docSnap) => {
+            const display = document.getElementById('publicNoticeBoard');
+            if(docSnap.exists() && docSnap.data().text) {
+                const data = docSnap.data();
+                display.classList.remove('hidden');
+                
+                const isRed = data.color === 'red';
+                display.className = `p-4 rounded-xl shadow-md border-l-4 flex gap-4 items-center ${isRed ? 'bg-red-50 border-red-600 text-red-800' : 'bg-slate-900 border-indigo-500 text-white'}`;
+                
+                document.getElementById('noticeHeading').innerText = isRed ? '⚠️ কমপ্লেইন / বিশেষ বার্তা' : '📢 সাধারণ নোটিশ';
+                document.getElementById('noticeContent').innerText = data.text;
+                
+                const imgEl = document.getElementById('noticeImage');
+                if(data.photo) {
+                    imgEl.src = data.photo;
+                    imgEl.classList.remove('hidden');
+                } else {
+                    imgEl.classList.add('hidden');
+                }
+            } else {
+                display.classList.add('hidden');
+            }
+        });
+
+        // ৮. নেতৃত্ব কমিটি প্রোফাইল আপলোড/আপডেট
+        window.updateLeaderProfile = async (role) => {
+            const name = document.getElementById(`${role}Name`).value.trim();
+            const fileInput = document.getElementById(`${role}Photo`);
+
+            if(!name) { alert('নাম দিন!'); return; }
+
+            let photoBase64 = null;
+            if(fileInput.files[0]) {
+                photoBase64 = await convertImageToBase64(fileInput.files[0]);
+            }
+
+            const payload = { name };
+            if(photoBase64) payload.photo = photoBase64;
+
+            await setDoc(doc(db, "committee", role), payload, { merge: true });
+            alert('কমিটি সদস্য আপডেট সফল!');
+        };
+
+        // কমিটি ডাটা রিয়েলটাইম লোড
+        ['president', 'vicePresident', 'organizingSec'].forEach(role => {
+            onSnapshot(doc(db, "committee", role), (docSnap) => {
+                if(docSnap.exists()) {
+                    const data = docSnap.data();
+                    if(data.name) document.getElementById(`display_${role}_name`).innerText = data.name;
+                    if(data.photo) document.getElementById(`display_${role}_img`).src = data.photo;
+                }
+            });
+        });
+
+        // অ্যাডমিন এক্সেস কন্ট্রোল
+        window.unlockAdmin = () => {
             const pass = document.getElementById('adminPass').value;
             if(pass === "692372") {
-                document.getElementById('adminPanel').classList.remove('hidden');
+                document.getElementById('adminControls').classList.remove('hidden');
                 document.getElementById('adminPass').value = '';
             } else {
-                alert('ভুল পাসওয়ার্ড');
+                alert('ভুল পাসওয়ার্ড!');
             }
         };
     </script>
 </head>
-<body class="bg-gray-100 p-4">
-    <div class="max-w-md mx-auto">
-        <h1 class="text-2xl font-bold mb-4 text-center">বাইক স্ট্যান্ড কন্ট্রোল</h1>
-        
-        <!-- রেজিস্ট্রেশন প্যানেল -->
-        <div class="bg-white p-6 rounded shadow mb-6">
-            <h3 class="font-bold mb-4 text-lg">রাইডার এন্ট্রি</h3>
-            <input type="text" id="riderName" placeholder="আপনার নাম" class="w-full p-2 border mb-2 rounded">
-            <input type="tel" id="riderPhone" placeholder="ফোন নম্বর" class="w-full p-2 border mb-4 rounded">
-            <div class="flex gap-2">
-                <button onclick="registerRider('auto')" class="flex-1 bg-blue-600 text-white p-2 rounded font-bold">অটো সিরিয়াল</button>
-                <button onclick="registerRider('manual')" class="flex-1 bg-green-600 text-white p-2 rounded font-bold">ম্যানুয়াল সিরিয়াল</button>
+<body class="bg-slate-100 min-h-screen text-gray-800 font-sans pb-12">
+
+    <!-- হেডার -->
+    <header class="bg-indigo-700 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-motorcycle text-2xl text-amber-400"></i>
+                <h1 class="text-xl font-bold tracking-wide">বাইক স্ট্যান্ড কন্ট্রোল</h1>
+            </div>
+            <span class="text-xs bg-indigo-800 px-3 py-1 rounded-full border border-indigo-500">
+                সীমানা: ২০০ মি.
+            </span>
+        </div>
+    </header>
+
+    <div class="max-w-4xl mx-auto p-4 space-y-6">
+
+        <!-- ১. ডাইনামিক নোটিশ বোর্ড -->
+        <div id="publicNoticeBoard" class="hidden p-4 rounded-xl shadow-md border-l-4 flex gap-4 items-center">
+            <img id="noticeImage" class="w-16 h-16 rounded-lg object-cover hidden border" />
+            <div class="flex-1">
+                <h3 id="noticeHeading" class="font-bold text-sm mb-1"></h3>
+                <p id="noticeContent" class="text-xs leading-relaxed"></p>
             </div>
         </div>
 
-        <!-- লাইভ সিরিয়াল লিস্ট -->
-        <div class="mb-6">
-            <h3 class="font-bold mb-4 text-lg">লাইভ সিরিয়াল</h3>
-            <div id="serialList"></div>
-        </div>
-        
-        <!-- এডমিন সেকশন -->
-        <div class="bg-white p-6 rounded shadow">
-            <h3 class="font-bold mb-4 text-lg">এডমিন প্যানেল</h3>
-            <input type="password" id="adminPass" placeholder="পাসওয়ার্ড" class="w-full p-2 border mb-2 rounded">
-            <button onclick="runAdminAction()" class="w-full bg-red-600 text-white p-2 rounded font-bold">লগইন</button>
+        <!-- ২. কমিটি পরিচিতি (সভাপতি, সহ-সভাপতি, সাংগঠনিক সম্পাদক) -->
+        <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <h3 class="font-bold text-gray-800 text-sm mb-3 text-center text-indigo-700 uppercase tracking-wider">
+                <i class="fa-solid fa-users"></i> স্ট্যান্ড পরিচালনা কমিটি
+            </h3>
+            <div class="grid grid-cols-3 gap-3">
+                <!-- সভাপতি -->
+                <div class="text-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                    <img id="display_president_img" src="https://via.placeholder.com/100" class="w-16 h-16 mx-auto rounded-full object-cover border-2 border-indigo-500 shadow-sm mb-2">
+                    <p class="font-bold text-xs text-gray-800 truncate" id="display_president_name">সভাপতি</p>
+                    <span class="text-[10px] text-indigo-600 font-semibold block">সভাপতি</span>
+                </div>
+                <!-- সহ-সভাপতি -->
+                <div class="text-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                    <img id="display_vicePresident_img" src="https://via.placeholder.com/100" class="w-16 h-16 mx-auto rounded-full object-cover border-2 border-indigo-500 shadow-sm mb-2">
+                    <p class="font-bold text-xs text-gray-800 truncate" id="display_vicePresident_name">সহ-সভাপতি</p>
+                    <span class="text-[10px] text-indigo-600 font-semibold block">সহ-সভাপতি</span>
+                </div>
+                <!-- সাংগঠনিক সম্পাদক -->
+                <div class="text-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                    <img id="display_organizingSec_img" src="https://via.placeholder.com/100" class="w-16 h-16 mx-auto rounded-full object-cover border-2 border-indigo-500 shadow-sm mb-2">
+                    <p class="font-bold text-xs text-gray-800 truncate" id="display_organizingSec_name">সাংগঠনিক সম্পাদক</p>
+                    <span class="text-[10px] text-indigo-600 font-semibold block">সাংগঠনিক সম্পাদক</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ৩ ও ৪. রেজিস্ট্রেশন এবং স্থায়ী ডাটাবেজ -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- বাধ্যতামূলক রাইডার রেজিস্ট্রেশন -->
+            <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-id-card text-indigo-600"></i> নতুন রাইডার রেজিস্ট্রেশন
+                </h3>
+                <div class="space-y-2">
+                    <input type="text" id="regName" placeholder="রাইডারের পূর্ণ নাম" class="w-full p-2 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                    <input type="tel" id="regPhone" placeholder="মোবাইল নম্বর" class="w-full p-2 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-500 block mb-1">ছবি সংযুক্ত করুন (বাধ্যতামূলক)</label>
+                        <input type="file" id="regPhoto" accept="image/*" class="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                    </div>
+                    <button onclick="registerPermanentRider()" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold text-xs hover:bg-indigo-700 transition">
+                        রেজিস্ট্রেশন জমা দিন
+                    </button>
+                </div>
+            </section>
+
+            <!-- স্থায়ী রাইডার ডাটাবেজ রেজিষ্টার রেকর্ড -->
+            <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-bold text-gray-800 text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-database text-emerald-600"></i> মেম্বার ডাটাবেজ
+                    </h3>
+                    <span class="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                        মোট: <span id="totalRegisteredCount">0</span> জন
+                    </span>
+                </div>
+                <div id="riderDatabaseList" class="grid grid-cols-2 gap-2 overflow-y-auto max-h-48 pr-1 flex-1">
+                    <!-- নিবন্ধিতদের তালিকা -->
+                </div>
+            </section>
         </div>
 
-        <div id="adminPanel" class="hidden mt-4 p-6 bg-red-50 border border-red-200 rounded">
-            <h2 class="font-bold text-red-600 text-xl mb-2">এডমিন কন্ট্রোল অ্যাক্টিভ</h2>
-            <p class="text-sm text-gray-700">এখান থেকে আপনি রাইডারদের সময় ও দূরত্ব নিয়ন্ত্রণ করতে পারবেন এবং নোটিশ বোর্ডে বার্তা পাঠাতে পারবেন।</p>
-        </div>
+        <!-- ৫ ও ৬. সিরিয়াল যোগ করার ফর্ম -->
+        <section class="bg-indigo-900 text-white p-4 rounded-xl shadow-md">
+            <h3 class="font-bold text-sm mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-list-check text-amber-400"></i> সিরিয়ালে নাম যুক্ত করুন
+            </h3>
+            <p class="text-[11px] text-indigo-200 mb-3">অবশ্যই রাইডারকে স্ট্যান্ডের ২০০ মিটারের ভেতর উপস্থিত থাকতে হবে।</p>
+            
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input type="tel" id="serialRiderPhone" placeholder="নিবন্ধিত মোবাইল নম্বর দিন" class="p-2 text-xs rounded-lg text-gray-800 flex-1 border-0 focus:ring-2 focus:ring-amber-400">
+                <button onclick="addToSerialQueue('online')" class="bg-amber-500 hover:bg-amber-600 text-slate-900 px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-wifi"></i> অটো (অনলাইন)
+                </button>
+                <button onclick="addToSerialQueue('manual')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-keyboard"></i> ম্যানুয়াল সিরিয়াল
+                </button>
+            </div>
+        </section>
+
+        <!-- ৭, ৮, ৯, ১০. লাইভ রিয়েলটাইম সিরিয়াল তালিকা -->
+        <section class="space-y-3">
+            <div class="flex justify-between items-center">
+                <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">
+                    <i class="fa-solid fa-[#000] fa-clock text-indigo-600"></i> লাইভ সিরিয়াল লিস্ট
+                </h3>
+                <span class="text-xs bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full font-bold">
+                    সিরিয়ালে উপস্থিত: <span id="queueCount">0</span> জন
+                </span>
+            </div>
+
+            <div id="activeQueueList" class="space-y-2">
+                <!-- লাইভ সিরিয়াল রেন্ডার হবে -->
+            </div>
+        </section>
+
+        <!-- ১১. এডমিন প্যানেল কন্ট্রোল -->
+        <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 class="font-bold text-gray-800 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-user-lock text-red-500"></i> এডমিন এলাকা
+                </h3>
+                <div class="flex gap-2">
+                    <input type="password" id="adminPass" placeholder="পাসওয়ার্ড" class="p-1 text-xs border rounded">
+                    <button onclick="unlockAdmin()" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold">লগইন</button>
+                </div>
+            </div>
+
+            <div id="adminControls" class="hidden space-y-4 pt-2">
+                <!-- নোটিশ পোস্ট সেকশন -->
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                    <h4 class="font-bold text-xs text-gray-700">নোটিশ প্রকাশ করুন</h4>
+                    <textarea id="adminNoticeText" rows="2" placeholder="নোটিশের তথ্য..." class="w-full p-2 text-xs border rounded"></textarea>
+                    <div class="flex gap-2 items-center">
+                        <select id="adminNoticeColor" class="p-1 text-xs border rounded">
+                            <option value="black">সাধারণ নোটিশ (কালো)</option>
+                            <option value="red">কমপ্লেইন (লাল)</option>
+                        </select>
+                        <input type="file" id="adminNoticePhoto" accept="image/*" class="text-xs text-gray-500">
+                        <button onclick="updateNoticeBoard()" class="bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold">পাবলিশ</button>
+                    </div>
+                </div>
+
+                <!-- কমিটি প্রোফাইল ম্যানেজমেন্ট -->
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+                    <h4 class="font-bold text-xs text-gray-700">কমিটি আপডেট করুন</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <!-- সভাপতি -->
+                        <div class="p-2 border rounded bg-white">
+                            <p class="font-bold text-[11px] mb-1">সভাপতি</p>
+                            <input type="text" id="presidentName" placeholder="নাম" class="w-full p-1 text-xs border rounded mb-1">
+                            <input type="file" id="presidentPhoto" accept="image/*" class="w-full text-[10px]">
+                            <button onclick="updateLeaderProfile('president')" class="mt-1 w-full bg-slate-800 text-white py-1 rounded text-[10px]">সেভ</button>
+                        </div>
+                        <!-- সহ-সভাপতি -->
+                        <div class="p-2 border rounded bg-white">
+                            <p class="font-bold text-[11px] mb-1">সহ-সভাপতি</p>
+                            <input type="text" id="vicePresidentName" placeholder="নাম" class="w-full p-1 text-xs border rounded mb-1">
+                            <input type="file" id="vicePresidentPhoto" accept="image/*" class="w-full text-[10px]">
+                            <button onclick="updateLeaderProfile('vicePresident')" class="mt-1 w-full bg-slate-800 text-white py-1 rounded text-[10px]">সেভ</button>
+                        </div>
+                        <!-- সাংগঠনিক সম্পাদক -->
+                        <div class="p-2 border rounded bg-white">
+                            <p class="font-bold text-[11px] mb-1">সাংগঠনিক সম্পাদক</p>
+                            <input type="text" id="organizingSecName" placeholder="নাম" class="w-full p-1 text-xs border rounded mb-1">
+                            <input type="file" id="organizingSecPhoto" accept="image/*" class="w-full text-[10px]">
+                            <button onclick="updateLeaderProfile('organizingSec')" class="mt-1 w-full bg-slate-800 text-white py-1 rounded text-[10px]">সেভ</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
     </div>
+
 </body>
 </html>
+</web_code_canvas>
