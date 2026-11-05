@@ -146,7 +146,7 @@
             if(selectEl) selectEl.innerHTML = options;
         });
 
-        // ২. সিরিয়ালে যুক্ত হওয়া (আপডেটকৃত: ম্যানুয়ালের জন্য স্ট্যান্ড লোকেশন চেক)
+        // ২. সিরিয়ালে যুক্ত হওয়া
         window.addToSerialQueue = async (type) => {
             const inputVal = document.getElementById('serialRiderPhone').value.trim();
             if(!inputVal) { alert('রাইডারের তথ্য বা ফোন নম্বর দিন!'); return; }
@@ -190,7 +190,6 @@
                         }
 
                     } else if (type === 'manual') {
-                        // ম্যানুয়ালের ক্ষেত্রে অপারেটরকে স্ট্যান্ডের সীমায় (ডিফল্ট ২০০ মি) থাকতে হবে
                         if (dist <= DEFAULT_GEOFENCE_LIMIT) {
                             const manualPhone = 'manual_' + Date.now();
                             const nowIso = new Date().toISOString();
@@ -212,7 +211,7 @@
                             alert(`ম্যানুয়াল সিরিয়াল যুক্ত করতে অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
                         }
                     }
-                }, () => { alert('লোকেশন যাচাইয়ের জন্য জিপিএস পারমিশন প্রয়োজন!'); }, { enableHighAccuracy: true });
+                }, () => { alert('লোকেশন যাচাইয়ের জন্য জিপিএস পারমিশন প্রয়োজন প্রয়োজন!'); }, { enableHighAccuracy: true });
             } else {
                 alert('আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।');
             }
@@ -230,7 +229,7 @@
             renderQueueUI();
         });
 
-        // ৪. ওয়েটিং টাইম ও রেন্ডার UI
+        // ৪. ওয়েটিং টাইম, জিওফেন্সিং অটো-রিমুভ ও রেন্ডার UI
         function renderQueueUI() {
             const container = document.getElementById('activeQueueList');
             if(activeQueue.length === 0) {
@@ -241,81 +240,98 @@
             const now = new Date();
             let html = '';
 
-            activeQueue.forEach((rider, index) => {
-                const entry = new Date(rider.entryTime);
-                const diffMs = now - entry;
-                
-                const totalSec = Math.floor(diffMs / 1000);
-                const hrs = Math.floor(totalSec / 3600);
-                const mins = Math.floor((totalSec % 3600) / 60);
-                const secs = totalSec % 60;
-                const timeStr = `${hrs > 0 ? hrs + 'ঘণ্টা ' : ''}${mins}মি. ${secs}সে.`;
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    const currentLat = position.coords.latitude;
+                    const currentLng = position.coords.longitude;
 
-                let breakBadge = '';
-                if(rider.breakStatus) {
-                    const breakStart = new Date(rider.breakStartTime);
-                    const elapsedMins = Math.floor((now - breakStart) / 60000);
-                    const maxAllowed = rider.breakStatus === 'prayer' ? 50 : 30;
+                    for (const rider of activeQueue) {
+                        const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
+                        const maxAllowedDist = specialLimits[rider.phone] ? Number(specialLimits[rider.phone]) : DEFAULT_GEOFENCE_LIMIT;
 
-                    if(elapsedMins >= maxAllowed) {
-                        deleteDoc(doc(db, "active_queue", rider.phone));
-                        return;
-                    }
+                        // সীমানা পার হয়ে গেলে এবং ব্রেক না থাকলে স্বয়ংক্রয়ভাবে সিরিয়াল কেটে দেওয়া হবে
+                        if (!rider.breakStatus && dist > maxAllowedDist) {
+                            await deleteDoc(doc(db, "active_queue", rider.phone));
+                            continue;
+                        }
 
-                    const remainingMins = maxAllowed - elapsedMins;
-                    breakBadge = `<div class="mt-1 text-xs font-bold ${rider.breakStatus === 'prayer' ? 'text-emerald-600' : 'text-amber-600'}">
-                        <i class="fa-solid fa-clock-rotate-left"></i> ${rider.breakStatus === 'prayer' ? 'নামাজের ব্রেক' : 'খাবারের ব্রেক'} (অবশিষ্ট: ${remainingMins} মি.)
-                    </div>`;
-                }
+                        const entry = new Date(rider.entryTime);
+                        const diffMs = now - entry;
+                        
+                        const totalSec = Math.floor(diffMs / 1000);
+                        const hrs = Math.floor(totalSec / 3600);
+                        const mins = Math.floor((totalSec % 3600) / 60);
+                        const secs = totalSec % 60;
+                        const timeStr = `${hrs > 0 ? hrs + 'ঘণ্টা ' : ''}${mins}মি. ${secs}সে.`;
 
-                html += `
-                <div class="p-3 bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm">
-                            ${index + 1}
-                        </div>
-                        <img src="${rider.photo || 'https://via.placeholder.com/40'}" class="w-12 h-12 rounded-full object-cover border">
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <h4 class="font-bold text-gray-800 text-sm">${rider.name}</h4>
-                                <span class="px-2 py-0.5 text-[10px] font-bold rounded ${rider.type === 'online' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}">
-                                    ${rider.type === 'online' ? 'অনলাইন (অটো)' : 'অফলাইন (ম্যানুয়াল)'}
-                                </span>
+                        let breakBadge = '';
+                        if(rider.breakStatus) {
+                            const breakStart = new Date(rider.breakStartTime);
+                            const elapsedMins = Math.floor((now - breakStart) / 60000);
+                            const maxAllowed = rider.breakStatus === 'prayer' ? 50 : 30;
+
+                            if(elapsedMins >= maxAllowed) {
+                                deleteDoc(doc(db, "active_queue", rider.phone));
+                                continue;
+                            }
+
+                            const remainingMins = maxAllowed - elapsedMins;
+                            breakBadge = `<div class="mt-1 text-xs font-bold ${rider.breakStatus === 'prayer' ? 'text-emerald-600' : 'text-amber-600'}">
+                                <i class="fa-solid fa-clock-rotate-left"></i> ${rider.breakStatus === 'prayer' ? 'নামাজের ব্রেক' : 'খাবারের ব্রেক'} (অবশিষ্ট: ${remainingMins} মি.)
+                            </div>`;
+                        }
+
+                        html += `
+                        <div class="p-3 bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm">
+                                    ${activeQueue.indexOf(rider) + 1}
+                                </div>
+                                <img src="${rider.photo || 'https://via.placeholder.com/40'}" class="w-12 h-12 rounded-full object-cover border">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h4 class="font-bold text-gray-800 text-sm">${rider.name}</h4>
+                                        <span class="px-2 py-0.5 text-[10px] font-bold rounded ${rider.type === 'online' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}">
+                                            ${rider.type === 'online' ? 'অনলাইন (অটো)' : 'অফলাইন (ম্যানুয়াল)'}
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-gray-500">${rider.phone}</p>
+                                    ${breakBadge}
+                                </div>
                             </div>
-                            <p class="text-xs text-gray-500">${rider.phone}</p>
-                            ${breakBadge}
-                        </div>
-                    </div>
 
-                    <div class="flex flex-wrap items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-2 md:pt-0">
-                        <div class="text-left md:text-right">
-                            <p class="text-[10px] text-gray-400">অপেক্ষার সময়</p>
-                            <p class="text-xs font-mono font-bold text-indigo-600">${timeStr}</p>
-                        </div>
+                            <div class="flex flex-wrap items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-2 md:pt-0">
+                                <div class="text-left md:text-right">
+                                    <p class="text-[10px] text-gray-400">অপেক্ষার সময়</p>
+                                    <p class="text-xs font-mono font-bold text-indigo-600">${timeStr}</p>
+                                </div>
 
-                        <div class="flex gap-1">
-                            <button onclick="takeBreak('${rider.phone}', 'prayer')" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded text-[11px] font-semibold border border-emerald-200">
-                                <i class="fa-solid fa-mosque"></i> নামাজ (৫০মি)
-                            </button>
-                            <button onclick="takeBreak('${rider.phone}', 'food')" class="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2 py-1 rounded text-[11px] font-semibold border border-amber-200">
-                                <i class="fa-solid fa-utensils"></i> খাবার (৩০মি)
-                            </button>
-                        </div>
+                                <div class="flex gap-1">
+                                    <button onclick="takeBreak('${rider.phone}', 'prayer')" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded text-[11px] font-semibold border border-emerald-200">
+                                        <i class="fa-solid fa-mosque"></i> নামাজ (৫০মি)
+                                    </button>
+                                    <button onclick="takeBreak('${rider.phone}', 'food')" class="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2 py-1 rounded text-[11px] font-semibold border border-amber-200">
+                                        <i class="fa-solid fa-utensils"></i> খাবার (৩০মি)
+                                    </button>
+                                </div>
 
-                        <button onclick="removeManualRider('${rider.phone}')" class="bg-red-50 text-red-600 hover:bg-red-100 px-2.5 py-1 rounded text-xs font-bold border border-red-200">
-                            <i class="fa-solid fa-trash"></i> সিরিয়াল কাটুন
-                        </button>
-                    </div>
-                </div>`;
-            });
-
-            container.innerHTML = html;
+                                <button onclick="removeManualRider('${rider.phone}')" class="bg-red-50 text-red-600 hover:bg-red-100 px-2.5 py-1 rounded text-xs font-bold border border-red-200">
+                                    <i class="fa-solid fa-trash"></i> সিরিয়াল কাটুন
+                                </button>
+                            </div>
+                        </div>`;
+                    }
+                    container.innerHTML = html || '<div class="p-6 text-center text-gray-400 bg-white rounded-xl shadow-sm">বর্তমানে সীমানায় কেউ নেই</div>';
+                }, (err) => {
+                    console.error("Geolocation error:", err);
+                }, { enableHighAccuracy: true });
+            }
         }
 
         if(!timerInterval) {
             timerInterval = setInterval(() => {
                 if(activeQueue.length > 0) renderQueueUI();
-            }, 1000);
+            }, 3000);
         }
 
         // ৫. ব্রেক
@@ -345,7 +361,7 @@
             alert('ব্রেক সেট করা হয়েছে।');
         };
 
-        // ৬. ম্যানুয়াল সিরিয়াল কাটা (আপডেটকৃত: অপারেটরকে স্ট্যান্ডের সীমানায় থাকতে হবে)
+        // ৬. ম্যানুয়াল সিরিয়াল কাটা
         window.removeManualRider = async (phone) => {
             if(!confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) return;
 
