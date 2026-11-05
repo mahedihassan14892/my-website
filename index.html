@@ -8,6 +8,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Firebase SDK (Compat Version) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
     <style>
         .active-tab { border-bottom: 3px solid #16a34a; color: #16a34a; font-weight: bold; background-color: #f0fdf4; }
@@ -65,7 +69,7 @@
                 <i class="fa-solid fa-bullhorn mr-2"></i> সমিতির নোটিশ বোর্ড
             </div>
             <p id="noticeText" class="text-xs text-amber-900 leading-relaxed">
-                স্ট্যান্ডের ৩০০ মিটারের মধ্যে প্রবেশ করলেই সিরিয়াল স্বয়ংক্রিয়ভাবে সক্রিয় হবে। বিরতিতে যাওয়ার আগে কারণ ও সময় মার্ক করা বাধ্যতামূলক।
+                স্ট্যান্ডের ৩০০ মিটারের মধ্যে প্রবেশ করলেই সিরিয়াল স্বয়ংক্রিয়ভাবে সক্রিয় হবে। বিরতিতে যাওয়ার আগে কারণ ও সময় মার্ক করা বাধ্যতামূলক।
             </p>
         </div>
 
@@ -269,20 +273,28 @@
         </div>
     </div>
 
-    <!-- JavaScript Application Logic -->
+    <!-- JavaScript Application Logic with Firebase & Fixed GPS Integration -->
     <script>
-        // অটো মেমোরি ও স্টোরেজ সেফটি ক্লিনার
-        (function autoMemoryPurge() {
-            try {
-                const q = localStorage.getItem('chandrima_queue');
-                if (q && q.length > 500000) { localStorage.removeItem('chandrima_queue'); }
-            } catch (e) {
-                localStorage.clear();
-            }
-        })();
+        // ==========================================
+        // FIREBASE CONFIGURATION (ফায়ারবেস কনফিগারেশন বসান)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "YOUR_FIREBASE_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
 
-        const STAND_LAT = 23.7588; 
-        const STAND_LNG = 90.3544;
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // সঠিক স্ট্যান্ডের জিপিএস স্থানাঙ্ক (ঢাকা উদ্যান, রোড ৭)
+        const STAND_LAT = 23.7593235; 
+        const STAND_LNG = 90.3438454;
         const BASE_RADIUS = 300; 
 
         let currentUser = null;
@@ -294,15 +306,50 @@
 
         let isAdminLoggedIn = false;
         let isWithinCurrentStand = false;
+        let globalQueue = [];
+        let globalRegisteredDrivers = [];
 
         document.addEventListener("DOMContentLoaded", () => {
-            loadNotice();
-            loadCommittee();
-            loadQueueData();
+            initFirebaseListeners();
             checkLoginState();
             startLocationTracking();
             setInterval(updateQueueTimers, 1000);
         });
+
+        function initFirebaseListeners() {
+            db.ref('chandrima_notice').on('value', (snapshot) => {
+                const notice = snapshot.val();
+                const noticeText = document.getElementById('noticeText');
+                if (notice && noticeText) {
+                    noticeText.innerText = notice;
+                }
+            });
+
+            db.ref('chandrima_committee').on('value', (snapshot) => {
+                const committee = snapshot.val() || {};
+                if(committee.presName) document.getElementById('committeePresName').innerText = committee.presName;
+                if(committee.presPhoto) document.getElementById('committeePresImg').src = committee.presPhoto;
+                if(committee.vpName) document.getElementById('committeeVpName').innerText = committee.vpName;
+                if(committee.vpPhoto) document.getElementById('committeeVpImg').src = committee.vpPhoto;
+                if(committee.orgName) document.getElementById('committeeOrgName').innerText = committee.orgName;
+                if(committee.orgPhoto) document.getElementById('committeeOrgImg').src = committee.orgPhoto;
+            });
+
+            db.ref('chandrima_queue').on('value', (snapshot) => {
+                const data = snapshot.val();
+                globalQueue = data ? Object.values(data) : [];
+                renderQueueData();
+                renderDriverAction(isWithinCurrentStand);
+            });
+
+            db.ref('chandrima_registered_drivers').on('value', (snapshot) => {
+                const data = snapshot.val();
+                globalRegisteredDrivers = data ? Object.values(data) : [];
+                renderRegisteredDriversForAdmin();
+                populateAdminDriverDropdown();
+                renderDriverAction(isWithinCurrentStand);
+            });
+        }
 
         function switchTab(tabName) {
             ['queue', 'driver', 'manual'].forEach(tab => {
@@ -338,719 +385,45 @@
             const pinInput = document.getElementById('adminPinInput');
             if(!pinInput) return;
             const pin = pinInput.value.trim();
-            const savedPin = localStorage.getItem('chandrima_admin_pin') || '1234';
-            if (pin === savedPin) {
-                isAdminLoggedIn = true;
-                const loginArea = document.getElementById('adminLoginArea');
-                const controls = document.getElementById('adminPanelControls');
-                if(loginArea) loginArea.classList.add('hidden');
-                if(controls) controls.classList.remove('hidden');
-                populateAdminDriverDropdown();
-                renderRegisteredDriversForAdmin();
-            } else {
-                alert('ভুল পিন কোড! সঠিক পিন দিন।');
-            }
-        }
-
-        function loadCommittee() {
-            let committee = {};
-            try {
-                committee = JSON.parse(localStorage.getItem('chandrima_committee')) || {};
-            } catch(e) { committee = {}; }
-
-            if(committee.presName) document.getElementById('committeePresName').innerText = committee.presName;
-            if(committee.presPhoto) document.getElementById('committeePresImg').src = committee.presPhoto;
-
-            if(committee.vpName) document.getElementById('committeeVpName').innerText = committee.vpName;
-            if(committee.vpPhoto) document.getElementById('committeeVpImg').src = committee.vpPhoto;
-
-            if(committee.orgName) document.getElementById('committeeOrgName').innerText = committee.orgName;
-            if(committee.orgPhoto) document.getElementById('committeeOrgImg').src = committee.orgPhoto;
+            
+            db.ref('chandrima_admin_pin').once('value').then((snapshot) => {
+                const savedPin = snapshot.val() || '1234';
+                if (pin === savedPin) {
+                    isAdminLoggedIn = true;
+                    document.getElementById('adminLoginArea').classList.add('hidden');
+                    document.getElementById('adminPanelControls').classList.remove('hidden');
+                    populateAdminDriverDropdown();
+                    renderRegisteredDriversForAdmin();
+                } else {
+                    alert('ভুল পিন কোড! সঠিক পিন দিন।');
+                }
+            });
         }
 
         function updateCommittee() {
-            let committee = {};
-            try {
-                committee = JSON.parse(localStorage.getItem('chandrima_committee')) || {};
-            } catch(e) { committee = {}; }
-
             const presName = document.getElementById('adminPresName').value.trim();
             const vpName = document.getElementById('adminVpName').value.trim();
             const orgName = document.getElementById('adminOrgName').value.trim();
 
-            if(presName) committee.presName = presName;
-            if(vpName) committee.vpName = vpName;
-            if(orgName) committee.orgName = orgName;
+            db.ref('chandrima_committee').once('value').then((snapshot) => {
+                let committee = snapshot.val() || {};
+                if(presName) committee.presName = presName;
+                if(vpName) committee.vpName = vpName;
+                if(orgName) committee.orgName = orgName;
 
-            const presFile = document.getElementById('adminPresPhoto').files[0];
-            const vpFile = document.getElementById('adminVpPhoto').files[0];
-            const orgFile = document.getElementById('adminOrgPhoto').files[0];
+                const presFile = document.getElementById('adminPresPhoto').files[0];
+                const vpFile = document.getElementById('adminVpPhoto').files[0];
+                const orgFile = document.getElementById('adminOrgPhoto').files[0];
 
-            let pendingImages = 0;
-            const checkDone = () => {
-                pendingImages--;
-                if(pendingImages <= 0) {
-                    try {
-                        localStorage.setItem('chandrima_committee', JSON.stringify(committee));
-                    } catch(e) {}
-                    loadCommittee();
-                    alert('কমিটির তথ্য সফলভাবে আপডেট করা হয়েছে!');
-                    toggleAdminModal();
-                }
-            };
-
-            if(presFile) {
-                pendingImages++;
-                compressAndResizeImage(presFile, (base64) => { committee.presPhoto = base64; checkDone(); });
-            }
-            if(vpFile) {
-                pendingImages++;
-                compressAndResizeImage(vpFile, (base64) => { committee.vpPhoto = base64; checkDone(); });
-            }
-            if(orgFile) {
-                pendingImages++;
-                compressAndResizeImage(orgFile, (base64) => { committee.orgPhoto = base64; checkDone(); });
-            }
-
-            if(pendingImages === 0) {
-                try {
-                    localStorage.setItem('chandrima_committee', JSON.stringify(committee));
-                } catch(e) {}
-                loadCommittee();
-                alert('কমিটির তথ্য সফলভাবে আপডেট করা হয়েছে!');
-                toggleAdminModal();
-            }
-        }
-
-        function renderRegisteredDriversForAdmin() {
-            let registeredDrivers = [];
-            try {
-                registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
-            } catch (e) {
-                registeredDrivers = [];
-            }
-
-            const countEl = document.getElementById('adminTotalRegisteredCount');
-            const container = document.getElementById('registeredDriversContainer');
-
-            if(countEl) countEl.innerText = `${registeredDrivers.length} জন`;
-
-            if(container) {
-                if(registeredDrivers.length === 0) {
-                    container.innerHTML = `<p class="text-center text-gray-500 py-2 text-[11px]">এখনো কোনো রাইডার রেজিস্টার্ড হয়নি।</p>`;
-                    return;
-                }
-                let html = '';
-                registeredDrivers.forEach((d, idx) => {
-                    let photoSrc = d.photo || '';
-                    let avatar = photoSrc ? `<img src="${photoSrc}" class="w-7 h-7 rounded-full object-cover border border-blue-500">` : `<i class="fa-solid fa-user-circle text-gray-400 text-lg"></i>`;
-                    html += `
-                        <div class="flex items-center justify-between bg-white p-2 rounded shadow-sm border border-gray-200">
-                            <div class="flex items-center space-x-2">
-                                ${avatar}
-                                <div>
-                                    <p class="font-bold text-gray-800 text-[11px]">${idx + 1}. ${d.name}</p>
-                                    <p class="text-[10px] text-gray-500">${d.phone}</p>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-                container.innerHTML = html;
-            }
-        }
-
-        function toggleRegisteredDriversList() {
-            const container = document.getElementById('registeredDriversContainer');
-            if(container) container.classList.toggle('hidden');
-        }
-
-        function populateAdminDriverDropdown() {
-            const selectTarget = document.getElementById('adminTargetPhone');
-            let registeredDrivers = [];
-            try {
-                registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
-            } catch (e) {
-                registeredDrivers = [];
-            }
-            let html = '<option value="">রাইডার নির্বাচন করুন</option>';
-            registeredDrivers.forEach(d => {
-                html += `<option value="${d.phone}">${d.name} (${d.phone})</option>`;
-            });
-            if(selectTarget) selectTarget.innerHTML = html;
-        }
-
-        function applyAdminOverrides() {
-            const phone = document.getElementById('adminTargetPhone').value;
-            const extraInput = document.getElementById('adminExtraDist').value;
-            const minsInput = document.getElementById('adminSpecialMins').value;
-
-            if(!phone) {
-                alert('দয়া করে একজন রাইডার সিলেক্ট করুন!');
-                return;
-            }
-
-            let queue = [];
-            let registeredDrivers = [];
-            try {
-                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
-                registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
-            } catch (e) {}
-
-            let driverInReg = registeredDrivers.find(d => d.phone === phone);
-            let driverInQ = queue.find(q => q.phone === phone);
-            
-            let extraDist = extraInput !== "" ? parseInt(extraInput) || 0 : 0;
-            let specialExpiry = minsInput !== "" ? new Date().getTime() + ((parseInt(minsInput) || 0) * 60000) : 0;
-
-            if (driverInReg) {
-                driverInReg.extraBonusDist = extraDist;
-                driverInReg.specialTimerExpiry = specialExpiry;
-                try {
-                    localStorage.setItem('chandrima_registered_drivers', JSON.stringify(registeredDrivers));
-                } catch(e) {}
-            }
-
-            if(driverInQ) {
-                driverInQ.extraBonusDist = extraDist;
-                driverInQ.specialTimerExpiry = specialExpiry;
-                try {
-                    localStorage.setItem('chandrima_queue', JSON.stringify(queue));
-                } catch(e) {}
-            }
-
-            alert(`রাইডার-এর জন্য পার্সোনাল দূরত্ব ও স্পেশাল সময় সফলভাবে সেট করা হয়েছে!`);
-            loadQueueData();
-            toggleAdminModal();
-        }
-
-        function changeAdminPin() {
-            const pinField = document.getElementById('newAdminPin');
-            if(!pinField) return;
-            const newPin = pinField.value.trim();
-            if (newPin.length >= 4) {
-                try {
-                    localStorage.setItem('chandrima_admin_pin', newPin);
-                } catch(e) {}
-                alert('এডমিন পিন সফলভাবে পরিবর্তন করা হয়েছে!');
-                pinField.value = '';
-            } else {
-                alert('কমপক্ষে ৪ সংখ্যার পিন দিন!');
-            }
-        }
-
-        function updateNotice() {
-            const noticeField = document.getElementById('adminNoticeInput');
-            if(!noticeField) return;
-            const newNotice = noticeField.value.trim();
-            if (newNotice) {
-                try {
-                    localStorage.setItem('chandrima_notice', newNotice);
-                } catch(e) {}
-                const noticeText = document.getElementById('noticeText');
-                if(noticeText) noticeText.innerText = newNotice;
-                alert('নোটিশ সফলভাবে আপডেট হয়েছে!');
-                toggleAdminModal();
-            }
-        }
-
-        function loadNotice() {
-            let notice = null;
-            try {
-                notice = localStorage.getItem('chandrima_notice');
-            } catch(e) { notice = null; }
-            const noticeText = document.getElementById('noticeText');
-            if (notice && noticeText) {
-                noticeText.innerText = notice;
-            }
-        }
-
-        function compressAndResizeImage(file, callback) {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = function (event) {
-                const img = new Image();
-                img.src = event.target.result;
-                img.onload = function () {
-                    const canvas = document.createElement('canvas');
-                    const MAX_WIDTH = 80;
-                    const MAX_HEIGHT = 80;
-                    let width = img.width;
-                    let height = img.height;
-
-                    if (width > height) {
-                        if (width > MAX_WIDTH) {
-                            height *= MAX_WIDTH / width;
-                            width = MAX_WIDTH;
-                        }
-                    } else {
-                        if (height > MAX_HEIGHT) {
-                            width *= MAX_HEIGHT / height;
-                            height = MAX_HEIGHT;
-                        }
+                let pendingImages = 0;
+                const checkDone = () => {
+                    pendingImages--;
+                    if(pendingImages <= 0) {
+                        db.ref('chandrima_committee').set(committee).then(() => {
+                            alert('কমিটির তথ্য সফলভাবে আপডেট করা হয়েছে!');
+                            toggleAdminModal();
+                        });
                     }
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    callback(canvas.toDataURL('image/jpeg', 0.5));
-                }
-            }
-        }
-
-        function handleRegistration(e) {
-            e.preventDefault();
-            const name = document.getElementById('regName').value.trim();
-            const phone = document.getElementById('regPhone').value.trim();
-            const photoInput = document.getElementById('regPhoto');
-
-            if (!photoInput.files || !photoInput.files[0]) {
-                alert('ছবি আপলোড করা বাধ্যতামূলক!');
-                return;
-            }
-
-            compressAndResizeImage(photoInput.files[0], function(photoBase64) {
-                let registeredDrivers = [];
-                try {
-                    registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
-                } catch (e) {
-                    registeredDrivers = [];
-                }
-
-                let existingPhone = registeredDrivers.find(d => d.phone === phone);
-                if (existingPhone) {
-                    alert('এই মোবাইল নম্বর দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট রেজিস্টার করা আছে!');
-                    return;
-                }
-
-                currentUser = { 
-                    name, 
-                    phone, 
-                    photo: photoBase64, 
-                    extraBonusDist: 0, 
-                    specialTimerExpiry: 0, 
-                    breakCounts: { food: 0, prayer: 0 },
-                    lastBreakDate: new Date().toDateString()
                 };
-                registeredDrivers.push(currentUser);
 
-                try {
-                    localStorage.setItem('chandrima_registered_drivers', JSON.stringify(registeredDrivers));
-                    localStorage.setItem('chandrima_driver', JSON.stringify(currentUser));
-                } catch (err) {
-                    alert('স্টোরেজ ফুল হয়ে গেছে! দয়া করে ছোট সাইজের ছবি দিন।');
-                    return;
-                }
-                
-                checkLoginState();
-                startLocationTracking();
-                alert('সফলভাবে রেজিস্ট্রেশন সম্পন্ন হয়েছে!');
-            });
-        }
-
-        function logoutDriver() {
-            currentUser = null;
-            try {
-                localStorage.removeItem('chandrima_driver');
-            } catch(e) {}
-            checkLoginState();
-        }
-
-        function checkLoginState() {
-            const regBox = document.getElementById('registrationBox');
-            const statusBox = document.getElementById('driverStatusBox');
-
-            if (currentUser) {
-                if(regBox) regBox.classList.add('hidden');
-                if(statusBox) statusBox.classList.remove('hidden');
-                const pName = document.getElementById('profileName');
-                const pPhone = document.getElementById('profilePhone');
-                const pImg = document.getElementById('profileImg');
-                if(pName) pName.innerText = currentUser.name;
-                if(pPhone) pPhone.innerText = currentUser.phone;
-                if(pImg && currentUser.photo) pImg.src = currentUser.photo;
-            } else {
-                if(regBox) regBox.classList.remove('hidden');
-                if(statusBox) statusBox.classList.add('hidden');
-            }
-        }
-
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3;
-            const φ1 = lat1 * Math.PI/180;
-            const φ2 = lat2 * Math.PI/180;
-            const Δφ = (lat2-lat1) * Math.PI/180;
-            const Δλ = (lon2-lon1) * Math.PI/180;
-
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-            return Math.round(R * c);
-        }
-
-        function startLocationTracking() {
-            if ("geolocation" in navigator) {
-                navigator.geolocation.watchPosition((pos) => {
-                    const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, STAND_LAT, STAND_LNG);
-                    
-                    let effectiveRadius = BASE_RADIUS;
-                    let hasSpecialTimerActive = false;
-
-                    if (currentUser) {
-                        let queue = [];
-                        let registeredDrivers = [];
-                        try {
-                            queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
-                            registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
-                        } catch (e) {}
-
-                        let regUser = registeredDrivers.find(d => d.phone === currentUser.phone);
-                        if(regUser) {
-                            currentUser.extraBonusDist = regUser.extraBonusDist || 0;
-                            currentUser.specialTimerExpiry = regUser.specialTimerExpiry || 0;
-                        }
-
-                        let driverInQ = queue.find(q => q.phone === currentUser.phone);
-                        
-                        if (currentUser.extraBonusDist) {
-                            effectiveRadius = BASE_RADIUS + currentUser.extraBonusDist;
-                        }
-
-                        const nowTime = new Date().getTime();
-                        if (currentUser.specialTimerExpiry && nowTime < currentUser.specialTimerExpiry) {
-                            hasSpecialTimerActive = true;
-                        } else if (currentUser.specialTimerExpiry && nowTime >= currentUser.specialTimerExpiry && driverInQ && driverInQ.statusNote && driverInQ.statusNote.includes('বিরতি')) {
-                            queue = queue.filter(q => q.phone !== currentUser.phone);
-                            try {
-                                localStorage.setItem('chandrima_queue', JSON.stringify(queue));
-                            } catch(e) {}
-                            alert('আপনার বিরতি বা স্পেশাল সময়ের মেয়াদ শেষ হয়ে যাওয়ায় সিরিয়াল থেকে বাদ দেওয়া হয়েছে।');
-                            loadQueueData();
-                        }
-
-                        let isInQueue = queue.some(q => q.phone === currentUser.phone);
-                        let canBeInQueue = (dist <= effectiveRadius) || hasSpecialTimerActive;
-
-                        if (canBeInQueue && !isInQueue) {
-                            queue.push({ 
-                                ...currentUser, 
-                                startTime: new Date().getTime(), 
-                                timeStr: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                                statusNote: 'অটো-জয়েন্ট'
-                            });
-                            try {
-                                localStorage.setItem('chandrima_queue', JSON.stringify(queue));
-                            } catch(e) {}
-                            loadQueueData();
-                        } else if (!canBeInQueue && isInQueue) {
-                            let driverObj = queue.find(q => q.phone === currentUser.phone);
-                            if (driverObj && (!driverObj.statusNote || driverObj.statusNote === 'অটো-জয়েন্ট' || driverObj.statusNote === 'ম্যানুয়াল')) {
-                                queue = queue.filter(q => q.phone !== currentUser.phone);
-                                try {
-                                    localStorage.setItem('chandrima_queue', JSON.stringify(queue));
-                                } catch(e) {}
-                                loadQueueData();
-                            }
-                        }
-                    }
-
-                    isWithinCurrentStand = (dist <= effectiveRadius) || hasSpecialTimerActive;
-
-                    const distElement = document.getElementById('profileDistance');
-                    if(distElement && currentUser) {
-                        let timerText = hasSpecialTimerActive ? " (স্পেশাল টাইমার সচল)" : "";
-                        // রাইডার নিজে শুধু তার প্রোফাইলে তার নিজের সঠিক দূরত্ব দেখতে পাবে
-                        distElement.innerText = `${dist} মিটার (সর্বোচ্চ সীমা: ${effectiveRadius}মি.)${timerText}`;
-                        renderDriverActions(isWithinCurrentStand, dist, effectiveRadius, hasSpecialTimerActive);
-                    }
-
-                    const manualMsg = document.getElementById('manualPermissionMsg');
-                    const manualForm = document.getElementById('manualFormArea');
-                    if(manualMsg && manualForm) {
-                        if(dist <= BASE_RADIUS) {
-                            manualMsg.classList.add('hidden');
-                            manualForm.classList.remove('hidden');
-                        } else {
-                            manualMsg.classList.remove('hidden');
-                            manualMsg.innerText = `আপনি স্ট্যান্ডের ৩০০ মিটারের বাইরে আছেন (${dist} মি.)। ম্যানুয়াল এন্ট্রি করতে হলে ৩০০ মিটারের মধ্যে আসতে হবে।`;
-                            manualForm.classList.add('hidden');
-                        }
-                    }
-
-                }, (err) => {
-                    const distElement = document.getElementById('profileDistance');
-                    if(distElement) distElement.innerText = 'জিপিএস অন করুন';
-                }, { enableHighAccuracy: true });
-            }
-        }
-
-        function renderDriverActions(isWithinStand, dist, effectiveRadius, hasSpecialTimerActive) {
-            if (!currentUser) return;
-            const actionArea = document.getElementById('standActionArea');
-            const breakSection = document.getElementById('breakSection');
-            let queue = [];
-            try {
-                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
-            } catch (e) {
-                queue = [];
-            }
-            let inQueue = queue.some(q => q.phone === currentUser.phone);
-
-            if (inQueue) {
-                if(actionArea) actionArea.innerHTML = `
-                    <div class="p-2.5 bg-blue-50 text-blue-800 text-center rounded mb-2 font-bold text-xs"><i class="fa-solid fa-circle-check"></i> আপনি অটোমেটিক সিরিয়ালে আছেন!</div>
-                    <button onclick="completeTrip()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2.5 rounded font-bold text-xs cursor-pointer transition">আমার ট্রিপ শেষ / সিরিয়াল কাটুন</button>
-                `;
-                if(breakSection) breakSection.classList.remove('hidden');
-            } else {
-                if(actionArea) actionArea.innerHTML = `
-                    <div class="p-2 bg-amber-50 text-amber-800 text-center rounded text-xs">স্ট্যান্ডের ৩০০ মিটারের মধ্যে প্রবেশ করলেই অটো সিরিয়ালে যুক্ত হবেন। (বর্তমান দূরত্ব: ${dist}মি.)</div>
-                `;
-                if(breakSection) breakSection.classList.add('hidden');
-            }
-        }
-
-        function markLeaveReason() {
-            if (!currentUser) return;
-            const reasonSel = document.getElementById('leaveReason');
-            if(!reasonSel) return;
-            const reasonText = reasonSel.value;
-
-            let queue = [];
-            let registeredDrivers = [];
-            try {
-                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
-                registeredDrivers = JSON.parse(localStorage.getItem('chandrima_registered_drivers')) || [];
-            } catch (e) {}
-
-            let driverInReg = registeredDrivers.find(d => d.phone === currentUser.phone);
-            const todayStr = new Date().toDateString();
-
-            if(driverInReg) {
-                if(!driverInReg.breakCounts || driverInReg.lastBreakDate !== todayStr) {
-                    driverInReg.breakCounts = { food: 0, prayer: 0 };
-                    driverInReg.lastBreakDate = todayStr;
-                }
-
-                let durationMins = 0;
-                if(reasonText.includes('খাবার')) {
-                    if(driverInReg.breakCounts.food >= 1) {
-                        alert('আজকে আপনার খাবারের বিরতির কোটা (১ বার) শেষ হয়ে গেছে!');
-                        return;
-                    }
-                    driverInReg.breakCounts.food += 1;
-                    durationMins = 30;
-                } else if(reasonText.includes('নামাজ')) {
-                    if(driverInReg.breakCounts.prayer >= 3) {
-                        alert('আজকে আপনার নামাজের বিরতির কোটা (৩ বার) শেষ হয়ে গেছে!');
-                        return;
-                    }
-                    driverInReg.breakCounts.prayer += 1;
-                    durationMins = 50;
-                } else {
-                    durationMins = 30; 
-                }
-
-                let expiryTime = new Date().getTime() + (durationMins * 60000);
-                driverInReg.specialTimerExpiry = expiryTime;
-
-                try {
-                    localStorage.setItem('chandrima_registered_drivers', JSON.stringify(registeredDrivers));
-                } catch(e) {}
-
-                let driverInQ = queue.find(q => q.phone === currentUser.phone);
-                if (driverInQ) {
-                    driverInQ.statusNote = reasonText;
-                    driverInQ.specialTimerExpiry = expiryTime;
-                    try {
-                        localStorage.setItem('chandrima_queue', JSON.stringify(queue));
-                    } catch(e) {}
-                }
-
-                alert(`আপনার কারণ "${reasonText}" সফলভাবে মার্ক করা হয়েছে। আপনাকে ${durationMins} মিনিটের স্পেশাল সময় দেওয়া হলো।`);
-                loadQueueData();
-                const breakSec = document.getElementById('breakSection');
-                if(breakSec) breakSec.classList.add('hidden');
-            }
-        }
-
-        function completeTrip() {
-            if (!currentUser) return;
-            let queue = [];
-            try {
-                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
-            } catch (e) {
-                queue = [];
-            }
-            queue = queue.filter(q => q.phone !== currentUser.phone);
-            try {
-                localStorage.setItem('chandrima_queue', JSON.stringify(queue));
-            } catch(e) {}
-            alert('আপনার ট্রিপ সম্পন্ন হয়েছে!');
-            loadQueueData();
-        }
-
-        function submitManualEntry() {
-            const nameEl = document.getElementById('manualNameInput');
-            const phoneEl = document.getElementById('manualPhoneInput');
-            const photoInput = document.getElementById('manualPhotoInput');
-            if(!nameEl || !phoneEl) return;
-
-            const name = nameEl.value.trim();
-            const phone = phoneEl.value.trim();
-
-            if (!name || !phone) {
-                alert('দয়া করে নাম ও মোবাইল নম্বর দিন!');
-                return;
-            }
-
-            const processQueueAdd = (photoBase64 = '') => {
-                let queue = [];
-                try {
-                    queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
-                } catch (e) {
-                    queue = [];
-                }
-                if (!queue.some(q => q.phone === phone)) {
-                    queue.push({ 
-                        name, 
-                        phone, 
-                        photo: photoBase64,
-                        startTime: new Date().getTime(),
-                        timeStr: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                        statusNote: 'ম্যানুয়াল',
-                        extraBonusDist: 0,
-                        specialTimerExpiry: 0
-                    });
-                    try {
-                        localStorage.setItem('chandrima_queue', JSON.stringify(queue));
-                    } catch(e) {}
-                    alert(`${name}-কে সফলভাবে সিরিয়ালে যুক্ত করা হয়েছে!`);
-                    
-                    nameEl.value = '';
-                    phoneEl.value = '';
-                    if(photoInput) photoInput.value = '';
-
-                    loadQueueData();
-                    switchTab('queue');
-                } else {
-                    alert('এই রাইডার ইতিমধ্যে সিরিয়ালে আছেন!');
-                }
-            };
-
-            if (photoInput && photoInput.files && photoInput.files[0]) {
-                compressAndResizeImage(photoInput.files[0], function(base64) {
-                    processQueueAdd(base64);
-                });
-            } else {
-                processQueueAdd('');
-            }
-        }
-
-        function resetQueue() {
-            if (confirm('আজকের সমস্ত সিরিয়াল রিসেট করতে চান?')) {
-                try {
-                    localStorage.removeItem('chandrima_queue');
-                } catch(e) {}
-                loadQueueData();
-                toggleAdminModal();
-                alert('সিরিয়াল সফলভাবে রিসেট করা হয়েছে!');
-            }
-        }
-
-        function loadQueueData() {
-            let queue = [];
-            try {
-                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
-            } catch (e) {
-                queue = [];
-            }
-
-            const now = new Date().getTime();
-            let queueChanged = false;
-            queue = queue.filter(item => {
-                if (item.specialTimerExpiry && now >= item.specialTimerExpiry && item.statusNote && item.statusNote.includes('বিরতি')) {
-                    queueChanged = true;
-                    return false;
-                }
-                return true;
-            });
-
-            if(queueChanged) {
-                try {
-                    localStorage.setItem('chandrima_queue', JSON.stringify(queue));
-                } catch(e) {}
-            }
-
-            const container = document.getElementById('queueListContainer');
-            if(!container) return;
-
-            const totalQ = document.getElementById('totalInQueue');
-            const totalS = document.getElementById('totalInStand');
-            if(totalQ) totalQ.innerText = queue.length;
-            if(totalS) totalS.innerText = queue.length;
-
-            if (queue.length === 0) {
-                container.innerHTML = `<div class="text-center py-8 text-gray-400 text-sm">বর্তমানে লাইভ সিরিয়ালে কোনো বাইক নেই।</div>`;
-                return;
-            }
-
-            let html = '';
-
-            queue.forEach((item, index) => {
-                const diffMs = now - (item.startTime || now);
-                const diffMins = Math.floor(diffMs / 60000);
-                const diffSecs = Math.floor((diffMs % 60000) / 1000);
-                const timeElapsedStr = `${diffMins} মি ${diffSecs} সে`;
-
-                let noteBadge = item.statusNote ? `<span class="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold"><i class="fa-solid fa-triangle-exclamation"></i> ${item.statusNote}</span>` : '';
-                
-                // 🛑 এখানে এক্সট্রা দূরত্বের ব্যাজটি পাবলিক সিরিয়াল থেকে পুরোপুরি হাইড করা হয়েছে, কিন্তু বিরতির কারণ ও টাইমার দেখা যাচ্ছে
-                let timerBadge = (item.specialTimerExpiry && now < item.specialTimerExpiry && item.statusNote && item.statusNote.includes('বিরতি')) ? `<span class="bg-purple-100 text-purple-800 text-[9px] px-1.5 py-0.5 rounded ml-1 font-semibold">স্পেশাল টাইমার সচল</span>` : '';
-                
-                let avatarHtml = item.photo 
-                    ? `<img src="${item.photo}" class="w-9 h-9 rounded-full object-cover border border-green-600 shadow-sm">` 
-                    : `<span class="w-9 h-9 flex items-center justify-center bg-gray-800 text-white font-bold rounded-full text-xs">${index + 1}</span>`;
-
-                html += `
-                    <div class="bg-white p-3 rounded-lg shadow-sm flex items-center justify-between border-l-4 ${index === 0 ? 'border-green-600 bg-green-50/30' : 'border-gray-300'}">
-                        <div class="flex items-center space-x-3">
-                            ${avatarHtml}
-                            <div>
-                                <h4 class="font-bold text-gray-800 text-xs">${index + 1}. ${item.name} ${index === 0 ? '<span class="bg-green-600 text-white text-[9px] px-1.5 py-0.5 rounded ml-1">পরবর্তী ট্রিপ</span>' : ''} ${noteBadge} ${timerBadge}</h4>
-                                <p class="text-[11px] text-gray-500">${item.phone}</p>
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <span class="block text-[10px] font-bold text-blue-600" id="timer-${index}">${timeElapsedStr}</span>
-                            <span class="text-[9px] text-gray-400">যোগ: ${item.timeStr || ''}</span>
-                        </div>
-                    </div>
-                `;
-            });
-            container.innerHTML = html;
-        }
-
-        function updateQueueTimers() {
-            let queue = [];
-            try {
-                queue = JSON.parse(localStorage.getItem('chandrima_queue')) || [];
-            } catch (e) {
-                queue = [];
-            }
-            const now = new Date().getTime();
-            queue.forEach((item, index) => {
-                const timerEl = document.getElementById(`timer-${index}`);
-                if (timerEl) {
-                    const diffMs = now - (item.startTime || now);
-                    const diffMins = Math.floor(diffMs / 60000);
-                    const diffSecs = Math.floor((diffMs % 60000) / 1000);
-                    timerEl.innerText = `${diffMins} মি ${diffSecs} সে`;
-                }
-            });
-        }
-    </script>
-</body>
-</html>
+                if(presFile) {
