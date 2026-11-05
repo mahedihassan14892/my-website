@@ -193,11 +193,15 @@
                 <h3 class="font-bold text-sm text-green-700">এডমিন কন্ট্রোল প্যানেল</h3>
                 <button type="button" onclick="toggleAdminModal()" class="text-gray-500 font-bold text-base px-1 cursor-pointer">✕</button>
             </div>
+            
+            <!-- Admin Login Area -->
             <div id="adminLoginArea" class="space-y-2">
                 <label class="block font-semibold">এডমিন পিন নম্বর দিন</label>
-                <input type="password" id="adminPinInput" placeholder="পিন কোড দিন" class="w-full p-2 border rounded outline-none">
+                <input type="password" id="adminPinInput" placeholder="পিন কোড দিন (ডিফল্ট: 1234)" class="w-full p-2 border rounded outline-none">
                 <button type="button" onclick="verifyAdmin()" class="w-full bg-green-700 hover:bg-green-800 text-white p-2 rounded font-bold cursor-pointer transition">লগইন</button>
             </div>
+
+            <!-- Admin Controls (Initially Hidden) -->
             <div id="adminPanelControls" class="hidden space-y-3">
                 
                 <!-- Committee Management for Admin -->
@@ -398,6 +402,8 @@
                 } else {
                     alert('ভুল পিন কোড! সঠিক পিন দিন।');
                 }
+            }).catch(err => {
+                alert('ডেটাবেজ সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
             });
         }
 
@@ -593,6 +599,8 @@
                     localStorage.setItem('chandrima_driver', JSON.stringify(currentUser));
                     alert('রেজিস্ট্রেশন সফল হয়েছে!');
                     checkLoginState();
+                    // রেজিস্ট্রেশনের পর অটোমেটিক মাই প্রোফাইল ট্যাবে নিয়ে যাবে
+                    switchTab('driver');
                 });
             });
         }
@@ -623,7 +631,7 @@
         }
 
         // ==========================================
-        // FIXED GPS LOCATION TRACKING
+        // ROBUST GPS LOCATION TRACKING
         // ==========================================
         function startLocationTracking() {
             if (navigator.geolocation) {
@@ -748,7 +756,9 @@
             };
 
             const safeKey = currentUser.phone.replace(/[^a-zA-Z0-9]/g, '_');
-            db.ref(`chandrima_queue/${safeKey}`).set(queueItem);
+            db.ref(`chandrima_queue/${safeKey}`).set(queueItem).then(() => {
+                alert('সফলভাবে সিরিয়ালে যুক্ত হয়েছেন!');
+            });
         }
 
         function leaveQueue() {
