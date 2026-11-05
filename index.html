@@ -27,7 +27,7 @@
                 <h1 class="text-lg font-bold">চন্দ্রিমা বাইকার একতা</h1>
                 <p class="text-xs text-green-200">ডিজিটাল অটোমেটিক স্ট্যান্ড ম্যানেজমেন্ট</p>
             </div>
-            <button onclick="toggleAdminModal()" class="bg-green-900 hover:bg-green-800 text-xs px-3 py-1.5 rounded-lg border border-green-500 cursor-pointer transition">
+            <button type="button" onclick="toggleAdminModal()" class="bg-green-900 hover:bg-green-800 text-xs px-3 py-1.5 rounded-lg border border-green-500 cursor-pointer transition">
                 <i class="fa-solid fa-lock mr-1"></i> এডমিন
             </button>
         </div>
@@ -75,13 +75,13 @@
 
         <!-- Navigation Tabs -->
         <div class="flex bg-white rounded-lg shadow-sm overflow-hidden text-sm border">
-            <button onclick="switchTab('queue')" id="tab-queue" class="flex-1 py-3 text-center active-tab cursor-pointer">
+            <button type="button" onclick="switchTab('queue')" id="tab-queue" class="flex-1 py-3 text-center active-tab cursor-pointer">
                 <i class="fa-solid fa-list-ol mr-1"></i> লাইভ সিরিয়াল
             </button>
-            <button onclick="switchTab('driver')" id="tab-driver" class="flex-1 py-3 text-center text-gray-600 font-medium cursor-pointer">
+            <button type="button" onclick="switchTab('driver')" id="tab-driver" class="flex-1 py-3 text-center text-gray-600 font-medium cursor-pointer">
                 <i class="fa-solid fa-id-card mr-1"></i> মাই প্রোফাইল
             </button>
-            <button onclick="switchTab('manual')" id="tab-manual" class="flex-1 py-3 text-center text-gray-600 font-medium cursor-pointer">
+            <button type="button" onclick="switchTab('manual')" id="tab-manual" class="flex-1 py-3 text-center text-gray-600 font-medium cursor-pointer">
                 <i class="fa-solid fa-keyboard mr-1"></i> ম্যানুয়াল এন্ট্রি
             </button>
         </div>
@@ -131,7 +131,7 @@
             <div id="driverStatusBox" class="hidden bg-white p-4 rounded-lg shadow-sm space-y-3">
                 <div class="flex justify-between items-center border-b pb-2">
                     <h3 class="font-bold text-gray-700 text-sm">রাইডার প্রোফাইল ও স্ট্যাটাস</h3>
-                    <button onclick="logoutDriver()" class="text-xs text-red-600 hover:underline cursor-pointer"><i class="fa-solid fa-right-from-bracket"></i> লগআউট</button>
+                    <button type="button" onclick="logoutDriver()" class="text-xs text-red-600 hover:underline cursor-pointer"><i class="fa-solid fa-right-from-bracket"></i> লগআউট</button>
                 </div>
                 <div class="flex items-center space-x-3 bg-gray-50 p-3 rounded border">
                     <img id="profileImg" src="" alt="Driver Photo" class="w-14 h-14 rounded-full object-cover border-2 border-green-600 shadow-sm">
@@ -151,7 +151,7 @@
                         <option value="নামাজের বিরতি (৫০ মিনিট)">নামাজের বিরতি (৫০ মিনিট) - দিনে ৩ বার</option>
                         <option value="জরুরী ব্যক্তিগত কাজ">জরুরী ব্যক্তিগত কাজ</option>
                     </select>
-                    <button onclick="markLeaveReason()" class="w-full bg-amber-600 hover:bg-amber-700 text-white p-2 rounded font-bold cursor-pointer transition">
+                    <button type="button" onclick="markLeaveReason()" class="w-full bg-amber-600 hover:bg-amber-700 text-white p-2 rounded font-bold cursor-pointer transition">
                         কারণ মার্ক করে স্ট্যান্ড ছাড়ুন
                     </button>
                 </div>
@@ -177,7 +177,7 @@
                         <label class="block font-semibold mb-1">রাইডারের ছবি (ঐচ্ছিক)</label>
                         <input type="file" id="manualPhotoInput" accept="image/*" class="w-full p-1.5 border rounded bg-white text-xs">
                     </div>
-                    <button onclick="submitManualEntry()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded font-bold shadow transition mt-2 cursor-pointer">
+                    <button type="button" onclick="submitManualEntry()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded font-bold shadow transition mt-2 cursor-pointer">
                         সিরিয়ালে নাম তুলে দিন
                     </button>
                 </div>
@@ -191,12 +191,12 @@
         <div class="bg-white rounded-lg p-4 w-full max-w-sm space-y-3 text-xs max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center border-b pb-2">
                 <h3 class="font-bold text-sm text-green-700">এডমিন কন্ট্রোল প্যানেল</h3>
-                <button onclick="toggleAdminModal()" class="text-gray-500 font-bold text-base px-1 cursor-pointer">✕</button>
+                <button type="button" onclick="toggleAdminModal()" class="text-gray-500 font-bold text-base px-1 cursor-pointer">✕</button>
             </div>
             <div id="adminLoginArea" class="space-y-2">
                 <label class="block font-semibold">এডমিন পিন নম্বর দিন</label>
                 <input type="password" id="adminPinInput" placeholder="পিন কোড দিন" class="w-full p-2 border rounded outline-none">
-                <button onclick="verifyAdmin()" class="w-full bg-green-700 hover:bg-green-800 text-white p-2 rounded font-bold cursor-pointer transition">লগইন</button>
+                <button type="button" onclick="verifyAdmin()" class="w-full bg-green-700 hover:bg-green-800 text-white p-2 rounded font-bold cursor-pointer transition">লগইন</button>
             </div>
             <div id="adminPanelControls" class="hidden space-y-3">
                 
@@ -218,7 +218,7 @@
                         <input type="text" id="adminOrgName" placeholder="সাংগঠনিক সম্পাদকের নাম" class="w-full p-1.5 border rounded mb-1 outline-none">
                         <input type="file" id="adminOrgPhoto" accept="image/*" class="w-full text-[10px]">
                     </div>
-                    <button onclick="updateCommittee()" class="w-full bg-green-700 hover:bg-green-800 text-white p-1.5 rounded font-bold text-[11px] cursor-pointer transition">কমিটি আপডেট করুন</button>
+                    <button type="button" onclick="updateCommittee()" class="w-full bg-green-700 hover:bg-green-800 text-white p-1.5 rounded font-bold text-[11px] cursor-pointer transition">কমিটি আপডেট করুন</button>
                 </div>
 
                 <!-- Registered Drivers Overview for Admin -->
@@ -227,7 +227,7 @@
                         <span><i class="fa-solid fa-users mr-1"></i> মোট রেজিস্টার্ড রাইডার:</span>
                         <span id="adminTotalRegisteredCount" class="bg-blue-600 text-white px-2 py-0.5 rounded-full">0 জন</span>
                     </div>
-                    <button onclick="toggleRegisteredDriversList()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded font-semibold text-[11px] cursor-pointer transition">
+                    <button type="button" onclick="toggleRegisteredDriversList()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded font-semibold text-[11px] cursor-pointer transition">
                         <i class="fa-solid fa-address-book mr-1"></i> রেজিস্টার্ড রাইডারদের তালিকা দেখুন/লুকান
                     </button>
                     <div id="registeredDriversContainer" class="hidden max-h-48 overflow-y-auto space-y-2 pt-2 border-t border-blue-200">
@@ -238,7 +238,7 @@
                 <div>
                     <label class="block font-semibold mb-1">নোটিশ বোর্ড আপডেট করুন</label>
                     <textarea id="adminNoticeInput" class="w-full p-2 border rounded outline-none h-14"></textarea>
-                    <button onclick="updateNotice()" class="mt-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded cursor-pointer transition">নোটিশ সেভ করুন</button>
+                    <button type="button" onclick="updateNotice()" class="mt-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded cursor-pointer transition">নোটিশ সেভ করুন</button>
                 </div>
 
                 <!-- Admin Control: Personal Distance & Special Timer Assignment -->
@@ -255,7 +255,7 @@
                         <label class="block text-[11px] text-gray-600 mb-0.5">স্পেশাল ছাড়ের সময় (মিনিট):</label>
                         <input type="number" id="adminSpecialMins" placeholder="যেমন: 60" class="w-full p-2 border rounded outline-none">
                     </div>
-                    <button onclick="applyAdminOverrides()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded font-bold cursor-pointer transition">
+                    <button type="button" onclick="applyAdminOverrides()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded font-bold cursor-pointer transition">
                         সেটিংস সেভ করুন
                     </button>
                 </div>
@@ -263,11 +263,11 @@
                 <div class="pt-2 border-t">
                     <label class="block font-semibold mb-1">এডমিন পিন পরিবর্তন করুন</label>
                     <input type="password" id="newAdminPin" placeholder="নতুন পিন দিন" class="w-full p-2 border rounded outline-none mb-1">
-                    <button onclick="changeAdminPin()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded cursor-pointer transition">পিন পরিবর্তন করুন</button>
+                    <button type="button" onclick="changeAdminPin()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded cursor-pointer transition">পিন পরিবর্তন করুন</button>
                 </div>
                 <hr class="my-2">
                 <div>
-                    <button onclick="resetQueue()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2 rounded font-bold cursor-pointer transition">আজকের সম্পূর্ণ সিরিয়াল রিসেট করুন</button>
+                    <button type="button" onclick="resetQueue()" class="w-full bg-red-600 hover:bg-red-700 text-white p-2 rounded font-bold cursor-pointer transition">আজকের সম্পূর্ণ সিরিয়াল রিসেট করুন</button>
                 </div>
             </div>
         </div>
@@ -288,7 +288,7 @@
             appId: "YOUR_APP_ID"
         };
 
-        // Initialize Firebase
+        // Initialize Firebase safely
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
@@ -623,7 +623,7 @@
         }
 
         // ==========================================
-        // FIXED GPS LOCATION TRACKING (লোকেশন ও পারমিশন ফিক্স)
+        // FIXED GPS LOCATION TRACKING
         // ==========================================
         function startLocationTracking() {
             if (navigator.geolocation) {
@@ -711,7 +711,7 @@
                 actionArea.innerHTML = `
                     <div class="bg-green-50 p-2.5 rounded border border-green-200 text-center space-y-1">
                         <p class="text-green-800 font-bold">আপনি বর্তমানে সিরিয়ালে আছেন (#${inQueue.serialNumber})</p>
-                        <button onclick="leaveQueue()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold w-full cursor-pointer transition">
+                        <button type="button" onclick="leaveQueue()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold w-full cursor-pointer transition">
                             স্ট্যান্ড ছাড়ুন / বিরতিতে যান
                         </button>
                     </div>
@@ -721,7 +721,7 @@
                 if(breakSec) breakSec.classList.add('hidden');
                 if (inStand) {
                     actionArea.innerHTML = `
-                        <button onclick="joinQueue()" class="bg-green-600 hover:bg-green-700 text-white p-2 rounded text-xs font-bold w-full shadow cursor-pointer transition">
+                        <button type="button" onclick="joinQueue()" class="bg-green-600 hover:bg-green-700 text-white p-2 rounded text-xs font-bold w-full shadow cursor-pointer transition">
                             স্ট্যান্ডে উপস্থিত - সিরিয়ালে নাম তুলুন
                         </button>
                     `;
@@ -838,7 +838,6 @@
                 return;
             }
 
-            // সিরিয়াল নম্বর অনুযায়ী সাজানো
             globalQueue.sort((a, b) => a.serialNumber - b.serialNumber);
 
             let html = '';
