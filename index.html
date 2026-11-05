@@ -386,7 +386,7 @@
             }
         }
 
-        // ফাস্ট এবং ফেইল-প্রুফ এডমিন পিন ভেরিফিকেশন (Default: 1234)
+        // সুপারফাস্ট এবং ফেল-প্রুফ এডমিন লগইন (ডিফল্ট পিন: 1234)
         function verifyAdmin() {
             const pinInput = document.getElementById('adminPinInput');
             if(!pinInput) return;
@@ -397,9 +397,19 @@
                 return;
             }
 
+            // লোকাল বা ডিফল্ট পিন 1234 চেক করবে এবং ডেটাবেজ চেক করবে
+            if (pin === '1234') {
+                isAdminLoggedIn = true;
+                document.getElementById('adminLoginArea').classList.add('hidden');
+                document.getElementById('adminPanelControls').classList.remove('hidden');
+                populateAdminDriverDropdown();
+                renderRegisteredDriversForAdmin();
+                return;
+            }
+
             db.ref('chandrima_admin_pin').once('value').then((snapshot) => {
                 const savedPin = snapshot.val() || '1234';
-                if (pin === savedPin || pin === '1234') {
+                if (pin === savedPin) {
                     isAdminLoggedIn = true;
                     document.getElementById('adminLoginArea').classList.add('hidden');
                     document.getElementById('adminPanelControls').classList.remove('hidden');
@@ -409,16 +419,7 @@
                     alert('ভুল পিন কোড! সঠিক পিন দিন।');
                 }
             }).catch(err => {
-                // নেটওয়ার্ক বা ডেটাবেজ ইস্যু থাকলে ডিফল্ট পিন 1234 দিয়ে লগইন নিশ্চিত করবে
-                if (pin === '1234') {
-                    isAdminLoggedIn = true;
-                    document.getElementById('adminLoginArea').classList.add('hidden');
-                    document.getElementById('adminPanelControls').classList.remove('hidden');
-                    populateAdminDriverDropdown();
-                    renderRegisteredDriversForAdmin();
-                } else {
-                    alert('ভুল পিন কোড!');
-                }
+                alert('ডেটাবেজ কানেকশনে সমস্যা হয়েছে।');
             });
         }
 
