@@ -34,6 +34,7 @@
         let activeQueue = [];
         let timerInterval = null;
         let specialLimits = {}; // কাস্টম ডিসট্যান্স ম্যাপ
+        let registeredRidersMap = {}; // রেজিস্ট্রার্ড রাইডার মেমোরি ক্যাশ
 
         // জিপিএস দূরত্ব হিসাব
         function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -126,9 +127,13 @@
             let html = '';
             let total = 0;
             let options = '<option value="">রাইডার সিলেক্ট করুন</option>';
+            registeredRidersMap = {}; // ক্যাশ আপডেট
+
             snapshot.forEach((docSnap) => {
                 total++;
                 const data = docSnap.data();
+                registeredRidersMap[data.phone] = data; // ক্যাশে রাখা
+
                 options += `<option value="${data.phone}">${data.name} (${data.phone})</option>`;
                 html += `
                 <div class="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border border-slate-200">
@@ -146,7 +151,7 @@
             if(selectEl) selectEl.innerHTML = options;
         });
 
-        // ২. সিরিয়ালে যুক্ত হওয়া
+        // ২. অটোমেটিক ও ম্যানুয়াল উভয় উপায়ে সিরিয়ালে যুক্ত হওয়ার ফাংশন
         window.addToSerialQueue = async (type) => {
             const inputVal = document.getElementById('serialRiderPhone').value.trim();
             if(!inputVal) { alert('রাইডারের তথ্য বা ফোন নম্বর দিন!'); return; }
@@ -183,7 +188,7 @@
                                 prayerCount: 0,
                                 foodCount: 0
                             });
-                            alert('অটোমেটিক অনলাইন সিরিয়ালে যুক্ত হয়েছেন!');
+                            alert('অনলাইন সিরিয়ালে যুক্ত হয়েছেন!');
                             document.getElementById('serialRiderPhone').value = '';
                         } else {
                             alert(`অনলাইন রাইডার নির্ধারিত সীমানার বাইরে আছেন (দূরত্ব: ${Math.round(dist)} মিটার, অনুমতি: ${maxAllowedDist} মিটার)।`);
@@ -211,13 +216,65 @@
                             alert(`ম্যানুয়াল সিরিয়াল যুক্ত করতে অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
                         }
                     }
-                }, () => { alert('লোকেশন যাচাইয়ের জন্য জিপিএস পারমিশন প্রয়োজন প্রয়োজন!'); }, { enableHighAccuracy: true });
+                }, () => { alert('লোকেশন যাচাইয়ের জন্য জিপিএস পারমিশন প্রয়োজন!'); }, { enableHighAccuracy: true });
             } else {
                 alert('আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।');
             }
         };
 
-        // ৩. সিরিয়াল তালিকা রিয়েলটাইম
+        // ৩. স্বয়ংক্রিয় জিপিএস সনাক্তকরণ ও অটো-সিরিয়াল এন্ট্রি ইঞ্জিন
+        function checkAndAutoRegisterLocation() {
+            if (!navigator.geolocation) {
+                showGpsStatus("আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।", "red");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                const dist = calculateDistance(lat, lng, STAND_LAT, STAND_LNG);
+
+                showGpsStatus(`স্ট্যান্ড থেকে আপনার অবস্থান: ${Math.round(dist)} মিটার দূরে`, "emerald");
+
+                // অ্যাপ চালু রাখলে নিবন্ধিত রাইডার থাকলে সীমানার ভেতরের ড্রাইভার অটো-এন্ট্রি পাবে
+                for (const phone in registeredRidersMap) {
+                    const riderData = registeredRidersMap[phone];
+                    const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
+
+                    // চেক করি রাইডার কি ইতোমধ্যে সিরিয়ালে আছে কিনা
+                    const inQueue = activeQueue.some(q => q.phone === phone);
+
+                    if (dist <= maxAllowedDist && !inQueue) {
+                        const nowIso = new Date().toISOString();
+                        await setDoc(doc(db, "active_queue", phone), {
+                            name: riderData.name,
+                            phone: phone,
+                            photo: riderData.photo,
+                            entryTime: nowIso,
+                            type: 'online',
+                            distance: Math.round(dist),
+                            breakStatus: null,
+                            breakStartTime: null,
+                            prayerCount: 0,
+                            foodCount: 0
+                        });
+                        console.log(`অটোমেটিক সিরিয়াল যুক্ত করা হয়েছে: ${riderData.name}`);
+                    }
+                }
+            }, (error) => {
+                showGpsStatus("⚠️ জিপিএস বন্ধ আছে বা লোকেশন পাওয়া যাচ্ছে না! রিফ্রেশ করুন অথবা জিপিএস অন করে অ্যাপে পুনরায় প্রবেশ করুন।", "amber");
+            }, { enableHighAccuracy: true, timeout: 10000 });
+        }
+
+        function showGpsStatus(msg, colorClass) {
+            const el = document.getElementById('gpsAutoStatus');
+            if(el) {
+                el.innerText = msg;
+                el.className = `text-xs p-2 rounded-lg text-center font-medium bg-${colorClass}-50 text-${colorClass}-700 border border-${colorClass}-200 mb-4`;
+            }
+        }
+
+        // ৪. সিরিয়াল তালিকা রিয়েলটাইম
         onSnapshot(collection(db, "active_queue"), (snapshot) => {
             activeQueue = [];
             snapshot.forEach((docSnap) => {
@@ -229,7 +286,7 @@
             renderQueueUI();
         });
 
-        // ৪. ওয়েটিং টাইম, জিওফেন্সিং অটো-রিমুভ ও রেন্ডার UI
+        // ৫. ওয়েটিং টাইম, জিওফেন্সিং অটো-রিমুভ ও রেন্ডার UI
         function renderQueueUI() {
             const container = document.getElementById('activeQueueList');
             if(activeQueue.length === 0) {
@@ -330,11 +387,12 @@
 
         if(!timerInterval) {
             timerInterval = setInterval(() => {
+                checkAndAutoRegisterLocation(); // অটো জিপিএস চেক
                 if(activeQueue.length > 0) renderQueueUI();
             }, 3000);
         }
 
-        // ৫. ব্রেক
+        // ৬. ব্রেক
         window.takeBreak = async (phone, type) => {
             const docRef = doc(db, "active_queue", phone);
             const docSnap = await getDoc(docRef);
@@ -361,7 +419,7 @@
             alert('ব্রেক সেট করা হয়েছে।');
         };
 
-        // ৬. ম্যানুয়াল সিরিয়াল কাটা
+        // ৭. ম্যানুয়াল সিরিয়াল কাটা
         window.removeManualRider = async (phone) => {
             if(!confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) return;
 
@@ -383,7 +441,7 @@
             }
         };
 
-        // ৭. নোটিশ বোর্ড
+        // ৮. নোটিশ বোর্ড
         window.updateNoticeBoard = async () => {
             const text = document.getElementById('adminNoticeText').value.trim();
             const color = document.getElementById('adminNoticeColor').value;
@@ -432,7 +490,7 @@
             }
         });
 
-        // ৮. কমিটি
+        // ৯. কমিটি
         window.updateLeaderProfile = async (role) => {
             const nameEl = document.getElementById(`${role}Name`);
             const fileInput = document.getElementById(`${role}Photo`);
@@ -463,7 +521,7 @@
             });
         });
 
-        // ৯. স্পেশাল ডিসট্যান্স কাস্টমাইজেশন (এডমিন ফিচার)
+        // ১০. স্পেশাল ডিসট্যান্স কাস্টমাইজেশন (এডমিন ফিচার)
         window.setSpecialDistance = async () => {
             const phone = document.getElementById('specialRiderSelect').value;
             const distLimit = document.getElementById('specialDistanceInput').value;
@@ -479,7 +537,7 @@
             document.getElementById('specialDistanceInput').value = '';
         };
 
-        // ১০. এডমিন আনলক
+        // ১১. এডমিন আনলক
         window.unlockAdmin = () => {
             const pass = document.getElementById('adminPass').value;
             if(pass === "692372") {
@@ -507,6 +565,11 @@
     </header>
 
     <div class="max-w-4xl mx-auto p-4 space-y-6">
+
+        <!-- জিপিএস লাইভ স্ট্যাটাস ইন্ডিকেটর -->
+        <div id="gpsAutoStatus" class="text-xs p-2 rounded-lg text-center font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <i class="fa-solid fa-location-crosshairs fa-spin"></i> জিপিএস অবস্থান যাচাই করা হচ্ছে...
+        </div>
 
         <!-- ১. ডাইনামিক নোটিশ বোর্ড -->
         <div id="publicNoticeBoard" class="hidden p-4 rounded-xl shadow-md border-l-4 flex gap-4 items-center">
@@ -573,17 +636,17 @@
             </section>
         </div>
 
-        <!-- ৫. সিরিয়াল যোগ ফর্ম -->
+        <!-- ৫. সিরিয়াল যোগ ফর্ম (অটো এবং ম্যানুয়াল অপশন সহ) -->
         <section class="bg-indigo-900 text-white p-4 rounded-xl shadow-md">
             <h3 class="font-bold text-sm mb-2 flex items-center gap-2">
                 <i class="fa-solid fa-list-check text-amber-400"></i> সিরিয়ালে নাম যুক্ত করুন
             </h3>
-            <p class="text-[11px] text-indigo-200 mb-3">অনলাইন রাইডার ও ম্যানুয়াল অপারেটরকে অবশ্যই নিজস্ব সীমানার ভেতর উপস্থিত থাকতে হবে।</p>
+            <p class="text-[11px] text-indigo-200 mb-3">আপনি সীমানার ভেতর প্রবেশ করলে অ্যাপ স্বয়ংক্রিয়ভাবে সিরিয়াল এন্ট্রি করবে। প্রয়োজন হলে ম্যানুয়ালিও নাম যুক্ত করা যাবে।</p>
             
             <div class="flex flex-col sm:flex-row gap-2">
                 <input type="text" id="serialRiderPhone" placeholder="মোবাইল নম্বর বা রাইডারের নাম" class="p-2 text-xs rounded-lg text-gray-800 flex-1 border-0 focus:ring-2 focus:ring-amber-400">
                 <button onclick="addToSerialQueue('online')" class="bg-amber-500 hover:bg-amber-600 text-slate-900 px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1">
-                    <i class="fa-solid fa-wifi"></i> অটো (অনলাইন)
+                    <i class="fa-solid fa-wifi"></i> অনলাইন (সিরিয়াল দিন)
                 </button>
                 <button onclick="addToSerialQueue('manual')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1">
                     <i class="fa-solid fa-keyboard"></i> ম্যানুয়াল সিরিয়াল
