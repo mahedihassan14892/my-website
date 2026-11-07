@@ -32,7 +32,7 @@
 
         // গ্লোবাল স্টেট ও লাইভ জিপিএস ক্যাশ
         let activeQueue = [];
-        let allRegisteredRiders = []; // সমস্ত রেজিস্টার্ড রাইডার লিস্ট
+        let allRegisteredRiders = [];
         let specialLimits = {}; 
         let registeredRidersMap = {}; 
         let currentLat = null;
@@ -96,7 +96,7 @@
             }
         });
 
-        // লাইভ জিপিএস ওয়াচার (watchPosition) ইনিশিয়ালাইজেশন ও অলটাইম লোকেশন সিঙ্ক
+        // লাইভ জিপিএস ওয়াচার (ডিভাইসের নিজস্ব অবস্থান ট্র্যাকিং)
         function initLiveLocationWatcher() {
             if (!navigator.geolocation) {
                 showGpsStatus("আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।", "red");
@@ -112,56 +112,7 @@
                     const distFromStand = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
                     showGpsStatus(`স্ট্যান্ড থেকে আপনার বর্তমান অবস্থান: লিনিয়ার ${Math.round(distFromStand)} মিটার দূরে`, "emerald");
 
-                    // ১. অটোমেটিক কিউ এন্ট্রি চেক
-                    for (const phone in registeredRidersMap) {
-                        const riderData = registeredRidersMap[phone];
-                        const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
-                        const inQueue = activeQueue.some(q => q.phone === phone);
-
-                        if (distFromStand <= maxAllowedDist && !inQueue) {
-                            const nowIso = new Date().toISOString();
-                            await setDoc(doc(db, "active_queue", phone), {
-                                name: riderData.name,
-                                phone: phone,
-                                photo: riderData.photo,
-                                entryTime: nowIso,
-                                type: 'online',
-                                distance: Math.round(distFromStand),
-                                lat: currentLat,
-                                lng: currentLng,
-                                lastUpdated: new Date().toISOString(),
-                                breakStatus: null,
-                                breakStartTime: null,
-                                prayerCount: 0,
-                                foodCount: 0
-                            });
-                        } else if (inQueue) {
-                            await updateDoc(doc(db, "active_queue", phone), {
-                                distance: Math.round(distFromStand),
-                                lat: currentLat,
-                                lng: currentLng,
-                                lastUpdated: new Date().toISOString()
-                            });
-                        }
-                    }
-
-                    // ২. সমস্ত নিবন্ধিত রাইডারদের জন্য অলটাইম লাইভ লোকেশন আপডেট (ডাটাবেজে সেভ করা যাতে স্ট্যান্ডে না থাকলেও ট্র্যাক করা যায়)
-                    // (যেহেতু এই ব্রাউজারটি ওপেন আছে, তাই এর লোকেশনটি ফায়ারবেসে রাইডার হিসেবে আপডেট হতে থাকবে)
-                    for (const phone in registeredRidersMap) {
-                        await updateDoc(doc(db, "registered_riders", phone), {
-                            lat: currentLat,
-                            lng: currentLng,
-                            lastActive: new Date().toISOString()
-                        }).catch(async () => {
-                            // যদি ফিল্ড না থাকে তবে সেট করে দেওয়া
-                            await setDoc(doc(db, "registered_riders", phone), {
-                                lat: currentLat,
-                                lng: currentLng,
-                                lastActive: new Date().toISOString()
-                            }, { merge: true });
-                        });
-                    }
-
+                    // এডমিন ট্র্যাকার রি-রেন্ডার করা
                     renderAdminAllRidersTracker();
                 },
                 (error) => {
@@ -197,8 +148,6 @@
                     name,
                     phone,
                     photo: photoBase64,
-                    lat: currentLat || STAND_LAT,
-                    lng: currentLng || STAND_LNG,
                     registeredAt: new Date().toISOString()
                 });
                 alert('স্থায়ী রাইডার রেজিস্ট্রেশন সফল হয়েছে!');
@@ -211,7 +160,7 @@
             }
         };
 
-        // নিবন্ধিত রাইডার ডাটাবেজ শুনো ও অলটাইম লিস্ট তৈরি করা
+        // নিবন্ধিত রাইডার ডাটাবেজ শুনো
         onSnapshot(collection(db, "registered_riders"), (snapshot) => {
             let html = '';
             let total = 0;
@@ -274,6 +223,13 @@
 
                 if (dist <= maxAllowedDist) {
                     const nowIso = new Date().toISOString();
+                    // রাইডারের নিজস্ব জিপিএস ডাটা আপডেট
+                    await updateDoc(riderRef, {
+                        lat: currentLat,
+                        lng: currentLng,
+                        lastActive: nowIso
+                    });
+
                     await setDoc(doc(db, "active_queue", inputVal), {
                         name: riderData.name,
                         phone: inputVal,
@@ -283,7 +239,7 @@
                         distance: Math.round(dist),
                         lat: currentLat,
                         lng: currentLng,
-                        lastUpdated: new Date().toISOString(),
+                        lastUpdated: nowIso,
                         breakStatus: null,
                         breakStartTime: null,
                         prayerCount: 0,
@@ -308,7 +264,7 @@
                         distance: Math.round(dist),
                         lat: currentLat,
                         lng: currentLng,
-                        lastUpdated: new Date().toISOString(),
+                        lastUpdated: nowIso,
                         breakStatus: null,
                         breakStartTime: null,
                         prayerCount: 0,
@@ -418,7 +374,7 @@
             container.innerHTML = html;
         }
 
-        // এডমিন বিশেষ ঘর: সমস্ত নিবন্ধিত রাইডারদের অলটাইম লাইভ লোকেশন ও দূরত্ব ট্র্যাকার (স্ট্যান্ডে থাকুক বা পালিয়ে যাক)
+        // এডমিন ঘর: সঠিকভাবে দূরত্ব ও জিপিএস স্ট্যাটাস রেন্ডারিং
         function renderAdminAllRidersTracker() {
             const container = document.getElementById('adminRiderLocationList');
             if(!container) return;
@@ -430,17 +386,21 @@
 
             let html = '';
             for(const rider of allRegisteredRiders) {
-                let liveDistStr = "জিপিএস সিগন্যাল খোঁজা হচ্ছে...";
+                let liveDistStr = "অফলাইন / জিপিএস ডাটা নেই";
                 let navUrl = "#";
+                let hasLocation = false;
 
                 if (rider.lat && rider.lng) {
+                    hasLocation = true;
                     navUrl = `https://www.google.com/maps/dir/?api=1&destination=${rider.lat},${rider.lng}`;
                     
                     if (currentLat !== null && currentLng !== null) {
                         const distFromAdmin = calculateDistance(currentLat, currentLng, rider.lat, rider.lng);
                         const roundedMeters = Math.round(distFromAdmin);
                         
-                        if (roundedMeters >= 1000) {
+                        if (roundedMeters === 0) {
+                            liveDistStr = `একই স্থানে (এডমিনের ফোন/আপনার নিকটে)`;
+                        } else if (roundedMeters >= 1000) {
                             liveDistStr = `${(roundedMeters / 1000).toFixed(2)} কি.মি. (আপনার ফোন থেকে)`;
                         } else {
                             liveDistStr = `${roundedMeters} মিটার (আপনার ফোন থেকে)`;
@@ -462,17 +422,19 @@
 
                     <div class="flex items-center justify-between md:justify-end gap-3 border-t border-slate-800 md:border-t-0 pt-2 md:pt-0">
                         <div class="text-left md:text-right">
-                            <span class="text-[10px] text-gray-400 block">আপনার ফোন থেকে সঠিক লাইভ দূরত্ব:</span>
-                            <span class="text-xs font-bold text-amber-400 font-mono"><i class="fa-solid fa-compass fa-spin text-amber-500"></i> ${liveDistStr}</span>
+                            <span class="text-[10px] text-gray-400 block">আপনার ফোন থেকে লাইভ দূরত্ব:</span>
+                            <span class="text-xs font-bold ${hasLocation ? 'text-amber-400' : 'text-gray-500'} font-mono">
+                                ${hasLocation ? '<i class="fa-solid fa-compass fa-spin text-amber-500"></i> ' : ''}${liveDistStr}
+                            </span>
                         </div>
 
-                        ${(rider.lat && rider.lng) ? `
+                        ${hasLocation ? `
                             <a href="${navUrl}" target="_blank" class="bg-red-600 hover:bg-red-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow transition">
                                 <i class="fa-solid fa-location-crosshairs text-amber-300"></i> 📍 ম্যাপে ধরে ফেলুন
                             </a>
                         ` : `
-                            <button disabled class="bg-gray-700 text-gray-500 font-bold px-3 py-1.5 rounded-lg text-xs cursor-not-allowed">
-                                📍 জিপিএস অনুপলব্ধ
+                            <button disabled class="bg-gray-800 text-gray-600 font-bold px-3 py-1.5 rounded-lg text-xs cursor-not-allowed border border-slate-700">
+                                📍 অফলাইন
                             </button>
                         `}
                     </div>
@@ -481,7 +443,7 @@
             container.innerHTML = html;
         }
 
-        // অ্যাপ লোড হওয়ার সাথে সাথে জিপিএস ওয়াচার চালু করা
+        // অ্যাপ লোড হওয়ার সাথে সাথে জিপিএস ওয়াচার চালু করা
         window.addEventListener('DOMContentLoaded', () => {
             initLiveLocationWatcher();
         });
