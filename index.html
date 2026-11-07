@@ -111,7 +111,7 @@
                     const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
                     showGpsStatus(`স্ট্যান্ড থেকে আপনার অবস্থান: লিনিয়ার ${Math.round(dist)} মিটার দূরে`, "emerald");
 
-                    // স্বয়ংক্রিয় অটো-এন্ট্রি চেক
+                    // স্বয়ংক্রিয় অটো-এন্ট্রি চেক (যদি সীমানার ভেতরে থাকে)
                     for (const phone in registeredRidersMap) {
                         const riderData = registeredRidersMap[phone];
                         const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
@@ -136,7 +136,7 @@
                 },
                 (error) => {
                     console.error("GPS Watch error:", error);
-                    showGpsStatus("⚠️ জিপিএস সিগন্যাল পাওয়া যাচ্ছে না! লোকেশন পারমিশন ও জিপিএস অন রাখুন।", "amber");
+                    showGpsStatus("⚠️ জিপিএস সিগন্যাল পাওয়া যাচ্ছে না! লোকেশন পারমিশন ও জিপিএস অন রাখুন।", "amber");
                 },
                 { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
             );
@@ -291,6 +291,7 @@
             const countEl = document.getElementById('queueCount');
             if(countEl) countEl.innerText = activeQueue.length;
             
+            // যেকোনো স্থান থেকেই যেন তালিকা রেন্ডার হয়
             renderQueueUIWithoutDistanceRestriction();
         });
 
@@ -406,7 +407,7 @@
             alert('ব্রেক সেট করা হয়েছে।');
         };
 
-        // ৭. ম্যানুয়াল সিরিয়াল কাটা
+        // ৭. ম্যানুয়াল সিরিয়াল কাটা (সীমার ভেতর থেকে কাটতে হবে)
         window.removeManualRider = async (phone) => {
             if(!confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) return;
 
@@ -657,4 +658,77 @@
         <!-- ৭. অ্যাডমিন কন্ট্রোল প্যানেল (পাসওয়ার্ড প্রটেক্টেড) -->
         <section class="bg-slate-900 text-white p-4 rounded-xl shadow-lg border border-slate-800 space-y-4">
             <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-                <h3 class="font-bold text-sm text-amber-40
+                <h3 class="font-bold text-sm text-amber-400 flex items-center gap-2">
+                    <i class="fa-solid fa-user-shield"></i> স্ট্যান্ড এডমিন কন্ট্রোল প্যানেল
+                </h3>
+                <div class="flex gap-2">
+                    <input type="password" id="adminPass" placeholder="পিন কোড" class="w-24 p-1 text-xs text-gray-900 rounded focus:outline-none">
+                    <button onclick="unlockAdmin()" class="bg-amber-500 text-slate-900 px-3 py-1 rounded font-bold text-xs hover:bg-amber-400 transition">
+                        আনলক
+                    </button>
+                </div>
+            </div>
+
+            <div id="adminControls" class="hidden space-y-4 pt-2">
+                
+                <!-- নোটিশ ম্যানেজমেন্ট -->
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-2">
+                    <h4 class="text-xs font-bold text-indigo-300"><i class="fa-solid fa-bullhorn"></i> নোটিশ ও কমপ্লেইন নিয়ন্ত্রণ</h4>
+                    <textarea id="adminNoticeText" placeholder="নোটিশের বিষয়বস্তু লিখুন..." class="w-full p-2 text-xs text-gray-900 rounded border focus:outline-none"></textarea>
+                    <div class="flex flex-col md:flex-row gap-2 justify-between items-center">
+                        <select id="adminNoticeColor" class="w-full md:w-auto p-1.5 text-xs text-gray-900 rounded">
+                            <option value="indigo">সাধারণ নোটিশ (নীল/কালো)</option>
+                            <option value="red">কমপ্লেইন / জরুরী বার্তা (লাল)</option>
+                        </select>
+                        <input type="file" id="adminNoticePhoto" accept="image/*" class="text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-slate-700 file:text-white">
+                        <button onclick="updateNoticeBoard()" class="w-full md:w-auto bg-indigo-600 text-white px-4 py-1.5 rounded font-bold text-xs hover:bg-indigo-500">
+                            পাবলিশ করুন
+                        </button>
+                    </div>
+                </div>
+
+                <!-- কাস্টম জিওফেন্স দূরত্ব সেটআপ -->
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-2">
+                    <h4 class="text-xs font-bold text-emerald-300"><i class="fa-solid fa-map-location-dot"></i> কাস্টম জিওফেন্স ডিসট্যান্স সেটিং</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <select id="specialRiderSelect" class="p-1.5 text-xs text-gray-900 rounded">
+                            <!-- ডাইনামিক রাইডার অপশন আসবে -->
+                        </select>
+                        <input type="number" id="specialDistanceInput" placeholder="অনুমোদিত দূরত্ব (মিটারে, যেমন: ৫০০)" class="p-1.5 text-xs text-gray-900 rounded">
+                        <button onclick="setSpecialDistance()" class="bg-emerald-600 text-white p-1.5 rounded font-bold text-xs hover:bg-emerald-500">
+                            স্পেশাল লিমিট সেট করুন
+                        </button>
+                    </div>
+                </div>
+
+                <!-- কমিটি প্রোফাইল ম্যানেজমেন্ট -->
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-2">
+                    <h4 class="text-xs font-bold text-amber-300"><i class="fa-solid fa-user-pen"></i> পরিচালনা কমিটি পরিবর্তন</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="space-y-1 bg-slate-900 p-2 rounded border border-slate-700">
+                            <p class="text-[11px] font-bold text-indigo-400">সভাপতি</p>
+                            <input type="text" id="presidentName" placeholder="নাম" class="w-full p-1 text-xs text-gray-900 rounded">
+                            <input type="file" id="presidentPhoto" accept="image/*" class="w-full text-[10px] text-gray-400">
+                            <button onclick="updateLeaderProfile('president')" class="w-full bg-slate-700 hover:bg-slate-600 text-white text-[10px] py-1 rounded font-bold">আপডেট</button>
+                        </div>
+                        <div class="space-y-1 bg-slate-900 p-2 rounded border border-slate-700">
+                            <p class="text-[11px] font-bold text-indigo-400">সহ-সভাপতি</p>
+                            <input type="text" id="vicePresidentName" placeholder="নাম" class="w-full p-1 text-xs text-gray-900 rounded">
+                            <input type="file" id="vicePresidentPhoto" accept="image/*" class="w-full text-[10px] text-gray-400">
+                            <button onclick="updateLeaderProfile('vicePresident')" class="w-full bg-slate-700 hover:bg-slate-600 text-white text-[10px] py-1 rounded font-bold">আপডেট</button>
+                        </div>
+                        <div class="space-y-1 bg-slate-900 p-2 rounded border border-slate-700">
+                            <p class="text-[11px] font-bold text-indigo-400">সাংগঠনিক সম্পাদক</p>
+                            <input type="text" id="organizingSecName" placeholder="নাম" class="w-full p-1 text-xs text-gray-900 rounded">
+                            <input type="file" id="organizingSecPhoto" accept="image/*" class="w-full text-[10px] text-gray-400">
+                            <button onclick="updateLeaderProfile('organizingSec')" class="w-full bg-slate-700 hover:bg-slate-600 text-white text-[10px] py-1 rounded font-bold">আপডেট</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </div>
+</body>
+</html>
