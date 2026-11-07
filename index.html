@@ -111,7 +111,7 @@
                     const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
                     showGpsStatus(`স্ট্যান্ড থেকে আপনার অবস্থান: লিনিয়ার ${Math.round(dist)} মিটার দূরে`, "emerald");
 
-                    // স্বয়ংক্রিয় অটো-এন্ট্রি চেক
+                    // স্বয়ংক্রিয় অটো-এন্ট্রি চেক (যদি সীমানার ভেতরে থাকে)
                     for (const phone in registeredRidersMap) {
                         const riderData = registeredRidersMap[phone];
                         const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
@@ -131,12 +131,8 @@
                                 prayerCount: 0,
                                 foodCount: 0
                             });
-                            console.log(`অটোমেটিক সিরিয়াল যুক্ত করা হয়েছে: ${riderData.name}`);
                         }
                     }
-
-                    // রিয়েলটাইমে কিউ UI এবং জিওফেন্স অটো-রিমুভ চেক করা
-                    processQueueGeofenceAndRender(currentLat, currentLng);
                 },
                 (error) => {
                     console.error("GPS Watch error:", error);
@@ -284,7 +280,7 @@
             }
         };
 
-        // ৪. সিরিয়াল তালিকা রিয়েলটাইম শুনো
+        // ৪. সিরিয়াল তালিকা রিয়েলটাইম শুনো (দূরত্ব ছাড়াই যেকোনো স্থান থেকে তালিকা দেখানোর ব্যবস্থা)
         onSnapshot(collection(db, "active_queue"), (snapshot) => {
             activeQueue = [];
             snapshot.forEach((docSnap) => {
@@ -295,13 +291,12 @@
             const countEl = document.getElementById('queueCount');
             if(countEl) countEl.innerText = activeQueue.length;
             
-            if (isLocationInitialized) {
-                processQueueGeofenceAndRender(currentLat, currentLng);
-            }
+            // যেকোনো স্থান থেকেই যেন তালিকা রেন্ডার হয়
+            renderQueueUIWithoutDistanceRestriction();
         });
 
-        // ৫. ওয়েটিং টাইম, জিওফেন্সিং অটো-রিমুভ ও রেন্ডার UI (ক্যাচড জিপিএস ব্যবহার করে)
-        async function processQueueGeofenceAndRender(lat, lng) {
+        // ৫. কিউ UI রেন্ডার করার ফাংশন (দূরত্ব ছাড়াই তালিকা দেখাবে)
+        function renderQueueUIWithoutDistanceRestriction() {
             const container = document.getElementById('activeQueueList');
             if(!container) return;
 
@@ -314,15 +309,6 @@
             let html = '';
 
             for (const rider of activeQueue) {
-                const dist = calculateDistance(lat, lng, STAND_LAT, STAND_LNG);
-                const maxAllowedDist = specialLimits[rider.phone] ? Number(specialLimits[rider.phone]) : DEFAULT_GEOFENCE_LIMIT;
-
-                // সীমানা পার হয়ে গেলে এবং ব্রেক না থাকলে স্বয়ংক্রিয়ভাবে সিরিয়াল কেটে দেওয়া হবে
-                if (!rider.breakStatus && dist > maxAllowedDist) {
-                    await deleteDoc(doc(db, "active_queue", rider.phone));
-                    continue;
-                }
-
                 const entry = new Date(rider.entryTime);
                 const diffMs = now - entry;
                 
@@ -337,16 +323,13 @@
                     const breakStart = new Date(rider.breakStartTime);
                     const elapsedMins = Math.floor((now - breakStart) / 60000);
                     const maxAllowed = rider.breakStatus === 'prayer' ? 50 : 30;
-
-                    if(elapsedMins >= maxAllowed) {
-                        deleteDoc(doc(db, "active_queue", rider.phone));
-                        continue;
-                    }
-
                     const remainingMins = maxAllowed - elapsedMins;
-                    breakBadge = `<div class="mt-1 text-xs font-bold ${rider.breakStatus === 'prayer' ? 'text-emerald-600' : 'text-amber-600'}">
-                        <i class="fa-solid fa-clock-rotate-left"></i> ${rider.breakStatus === 'prayer' ? 'নামাজের ব্রেক' : 'খাবারের ব্রেক'} (অবশিষ্ট: ${remainingMins} মি.)
-                    </div>`;
+
+                    if(remainingMins > 0) {
+                        breakBadge = `<div class="mt-1 text-xs font-bold ${rider.breakStatus === 'prayer' ? 'text-emerald-600' : 'text-amber-600'}">
+                            <i class="fa-solid fa-clock-rotate-left"></i> ${rider.breakStatus === 'prayer' ? 'নামাজের ব্রেক' : 'খাবারের ব্রেক'} (অবশিষ্ট: ${remainingMins} মি.)
+                        </div>`;
+                    }
                 }
 
                 html += `
@@ -389,10 +372,10 @@
                     </div>
                 </div>`;
             }
-            container.innerHTML = html || '<div class="p-6 text-center text-gray-400 bg-white rounded-xl shadow-sm">বর্তমানে সীমানায় কেউ নেই</div>';
+            container.innerHTML = html;
         }
 
-        // অ্যাপ লোড হওয়ার সাথে সাথে জিপিএস ওয়াচার চালু করা
+        // অ্যাপ লোড হওয়ার সাথে সাথে জিপিএস ওয়াচার চালু করা
         window.addEventListener('DOMContentLoaded', () => {
             initLiveLocationWatcher();
         });
@@ -424,7 +407,7 @@
             alert('ব্রেক সেট করা হয়েছে।');
         };
 
-        // ৭. ম্যানুয়াল সিরিয়াল কাটা
+        // ৭. ম্যানুয়াল সিরিয়াল কাটা (সীমার ভেতর থেকে কাটতে হবে)
         window.removeManualRider = async (phone) => {
             if(!confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) return;
 
@@ -437,7 +420,7 @@
                     alert(`সিরিয়াল কাটার জন্য অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
                 }
             } else {
-                alert('জিপিএস লোকেশন এখনও পাওয়া যায়নি।');
+                alert('জিপিএস লোকেশন এখনও পাওয়া যায়নি।');
             }
         };
 
