@@ -111,7 +111,7 @@
                     const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
                     showGpsStatus(`স্ট্যান্ড থেকে আপনার অবস্থান: লিনিয়ার ${Math.round(dist)} মিটার দূরে`, "emerald");
 
-                    // স্বয়ংক্রিয় অটো-এন্ট্রি চেক (যদি সীমানার ভেতরে থাকে)
+                    // স্বয়ংক্রিয় অটো-এন্ট্রি চেক
                     for (const phone in registeredRidersMap) {
                         const riderData = registeredRidersMap[phone];
                         const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
@@ -136,7 +136,7 @@
                 },
                 (error) => {
                     console.error("GPS Watch error:", error);
-                    showGpsStatus("⚠️ জিপিএস সিগন্যাল পাওয়া যাচ্ছে না! লোকেশন পারমিশন ও জিপিএস অন রাখুন।", "amber");
+                    showGpsStatus("⚠️ জিপিএস সিগন্যাল পাওয়া যাচ্ছে না! লোকেশন পারমিশন ও জিপিএস অন রাখুন।", "amber");
                 },
                 { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
             );
@@ -291,7 +291,6 @@
             const countEl = document.getElementById('queueCount');
             if(countEl) countEl.innerText = activeQueue.length;
             
-            // যেকোনো স্থান থেকেই যেন তালিকা রেন্ডার হয়
             renderQueueUIWithoutDistanceRestriction();
         });
 
@@ -407,7 +406,7 @@
             alert('ব্রেক সেট করা হয়েছে।');
         };
 
-        // ৭. ম্যানুয়াল সিরিয়াল কাটা (সীমার ভেতর থেকে কাটতে হবে)
+        // ৭. ম্যানুয়াল সিরিয়াল কাটা
         window.removeManualRider = async (phone) => {
             if(!confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) return;
 
