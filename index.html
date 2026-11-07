@@ -3,128 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>মিনি স্পিন গেম ডেমো</title>
+    <title>প্রফেশনাল স্পিন ও রিওয়ার্ড গেম</title>
+    <!-- Google Font & FontAwesome Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #121212;
-            color: #ffffff;
-            text-align: center;
+        :root {
+            --bg-color: #0b0e14;
+            --card-bg: #151a23;
+            --primary-gold: #ffd700;
+            --secondary-gold: #ff9900;
+            --text-color: #ffffff;
+            --accent-red: #e74c3c;
+        }
+
+        * {
+            box-sizing: border-box;
             margin: 0;
-            padding: 20px;
+            padding: 0;
+            font-family: 'Hind Siliguri', sans-serif;
         }
-        .container {
-            max-width: 400px;
-            margin: 0 auto;
-            background: #1e1e1e;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px 10px;
         }
-        .wheel-container {
+
+        .game-card {
+            background: var(--card-bg);
+            width: 100%;
+            max-width: 440px;
+            border-radius: 20px;
+            padding: 25px 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 15px rgba(255, 215, 0, 0.1);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            text-align: center;
             position: relative;
-            width: 200px;
-            height: 200px;
-            margin: 20px auto;
-            border: 5px solid #ffcc00;
-            border-radius: 50%;
+        }
+
+        /* হেডার ও লোগো সেকশন */
+        .brand-header {
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #333;
-            transition: transform 3s ease-out;
-        }
-        .pointer {
-            width: 0;
-            height: 0;
-            border-left: 10px solid transparent;
-            border-right: 10px solid transparent;
-            border-bottom: 20px solid #ffcc00;
-            margin: 0 auto;
-        }
-        button {
-            background-color: #ffcc00;
-            color: #000;
-            border: none;
-            padding: 10px 20px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-top: 15px;
-        }
-        button:hover {
-            background-color: #e6b800;
-        }
-        .stats {
-            margin-top: 15px;
-            font-size: 14px;
-            color: #bbb;
-        }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <h2>ভোলা গেম জোন (ডেমো)</h2>
-    <div class="pointer"></div>
-    <div class="wheel-container" id="wheel">
-        <span id="wheelText">SPIN</span>
-    </div>
-    
-    <button onclick="spinWheel()">ঘুরান (Spin)</button>
-    
-    <div class="stats">
-        <p>মোট স্পিন: <span id="spinCount">0</span> বার</p>
-        <p>ব্যালেন্স: <span id="balance">0</span> টাকা</p>
-        <p id="message" style="color: #ffcc00; font-weight: bold;"></p>
-    </div>
-</div>
-
-<!-- ছোট সাউন্ড এফেক্টের জন্য ব্রাউজারের অডিও অবজেক্ট -->
-<audio id="spinSound" src="https://www.soundjay.com/buttons/sounds/button-3.mp3"></audio>
-
-<script>
-    let spinCount = 0;
-    let balance = 0;
-    let currentDegree = 0;
-    let isSpinning = false;
-
-    function spinWheel() {
-        if (isSpinning) return;
-        isSpinning = true;
-
-        // বাটন বা প্রেস করার সাথে সাথে সাউন্ড প্লে করার কোড
-        const sound = document.getElementById('spinSound');
-        sound.currentTime = 0;
-        sound.play().catch(e => console.log("Audio play blocked:", e));
-
-        spinCount++;
-        document.getElementById('spinCount').innerText = spinCount;
-        document.getElementById('message').innerText = "";
-
-        const wheel = document.getElementById('wheel');
-        
-        // রেন্ডম ডিগ্রি তৈরি করা (কমপক্ষে ৫-৬ বার ঘুরে থামবে)
-        const randomDegree = Math.floor(Math.random() * 360) + 1800;
-        currentDegree += randomDegree;
-        
-        wheel.style.transform = `rotate(${currentDegree}deg)`;
-
-        setTimeout(() => {
-            isSpinning = false;
-            
-            // লজিক: প্রতি ১০ বার স্পিন করার পর ৫ টাকা যোগ হওয়ার শর্ত
-            if (spinCount % 10 === 0) {
-                balance += 5;
-                document.getElementById('balance').innerText = balance;
-                document.getElementById('message').innerText = "অভিনন্দন! ১০ বার পূর্ণ করায় আপনি ৫ টাকা বোনাস পেয়েছেন!";
-            } else {
-                document.getElementById('message').innerText = "আরেকবার চেষ্টা করুন!";
-            }
-        }, 3000); // অ্যানিমেশনের সময় ৩ সেকেন্ড
-    }
-</script>
-
-</body>
-</html>
+            gap: 12px;
+            margin-bottom: 20
