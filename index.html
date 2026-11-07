@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>বাইক স্ট্যান্ড কন্ট্রোল সিস্টেম</title>
+    <title>বাইক স্ট্যান্ড কন্ট্রোল ও লাইভ ট্র্যাকিং সিস্টেম</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module">
@@ -38,7 +38,7 @@
         let currentLng = null;
         let isLocationInitialized = false;
 
-        // জিপিএস দূরত্ব হিসাব
+        // জিপিএস দূরত্ব হিসাব ফাংশন (দুইটি জিপিএস পয়েন্টের দূরত্ব মিটারে)
         function calculateDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
             const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -108,16 +108,16 @@
                     currentLng = position.coords.longitude;
                     isLocationInitialized = true;
 
-                    const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
-                    showGpsStatus(`স্ট্যান্ড থেকে আপনার অবস্থান: লিনিয়ার ${Math.round(dist)} মিটার দূরে`, "emerald");
+                    const distFromStand = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
+                    showGpsStatus(`স্ট্যান্ড থেকে আপনার অবস্থান: লিনিয়ার ${Math.round(distFromStand)} মিটার দূরে`, "emerald");
 
-                    // স্বয়ংক্রিয় অটো-এন্ট্রি চেক
+                    // এডমিন ও ইউজারদের লাইভ লোকেশন ফায়ারবেসে আপডেট করা
                     for (const phone in registeredRidersMap) {
                         const riderData = registeredRidersMap[phone];
                         const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
                         const inQueue = activeQueue.some(q => q.phone === phone);
 
-                        if (dist <= maxAllowedDist && !inQueue) {
+                        if (distFromStand <= maxAllowedDist && !inQueue) {
                             const nowIso = new Date().toISOString();
                             await setDoc(doc(db, "active_queue", phone), {
                                 name: riderData.name,
@@ -125,14 +125,27 @@
                                 photo: riderData.photo,
                                 entryTime: nowIso,
                                 type: 'online',
-                                distance: Math.round(dist),
+                                distance: Math.round(distFromStand),
+                                lat: currentLat,
+                                lng: currentLng,
+                                lastUpdated: new Date().toISOString(),
                                 breakStatus: null,
                                 breakStartTime: null,
                                 prayerCount: 0,
                                 foodCount: 0
                             });
+                        } else if (inQueue) {
+                            await updateDoc(doc(db, "active_queue", phone), {
+                                distance: Math.round(distFromStand),
+                                lat: currentLat,
+                                lng: currentLng,
+                                lastUpdated: new Date().toISOString()
+                            });
                         }
                     }
+
+                    // এডমিন ট্র্যাকার উইন্ডো ডাইনামিক রি-রেন্ডার করা
+                    renderAdminLocationTracker();
                 },
                 (error) => {
                     console.error("GPS Watch error:", error);
@@ -245,6 +258,9 @@
                         entryTime: nowIso,
                         type: type,
                         distance: Math.round(dist),
+                        lat: currentLat,
+                        lng: currentLng,
+                        lastUpdated: new Date().toISOString(),
                         breakStatus: null,
                         breakStartTime: null,
                         prayerCount: 0,
@@ -267,6 +283,9 @@
                         entryTime: nowIso,
                         type: type,
                         distance: Math.round(dist),
+                        lat: currentLat,
+                        lng: currentLng,
+                        lastUpdated: new Date().toISOString(),
                         breakStatus: null,
                         breakStartTime: null,
                         prayerCount: 0,
@@ -294,6 +313,7 @@
             if(countEl) countEl.innerText = activeQueue.length;
             
             renderQueueUIWithoutDistanceRestriction();
+            renderAdminLocationTracker();
         });
 
         // ৫. কিউ UI রেন্ডার করার ফাংশন
@@ -376,6 +396,69 @@
             container.innerHTML = html;
         }
 
+        // এডমিন প্যানেলের "সকল রাইডারের লাইভ লোকেশন ও ডিসট্যান্স ঘর" রেন্ডার করার ফাংশন
+        function renderAdminLocationTracker() {
+            const container = document.getElementById('adminRiderLocationList');
+            if(!container) return;
+
+            if(activeQueue.length === 0) {
+                container.innerHTML = '<p class="text-xs text-gray-400 text-center py-4 bg-slate-900 rounded-lg">বর্তমানে সক্রিয় কোনো রাইডার পাওয়া যায়নি</p>';
+                return;
+            }
+
+            let html = '';
+            for(const rider of activeQueue) {
+                let liveDistStr = "অজানা (জিপিএস অফ)";
+                let mapUrl = "#";
+
+                if (rider.lat && rider.lng) {
+                    mapUrl = `https://www.google.com/maps/dir/?api=1&destination=${rider.lat},${rider.lng}`;
+                    
+                    if (currentLat !== null && currentLng !== null) {
+                        const distFromAdmin = calculateDistance(currentLat, currentLng, rider.lat, rider.lng);
+                        const roundedMeters = Math.round(distFromAdmin);
+                        
+                        if (roundedMeters >= 1000) {
+                            liveDistStr = `${(roundedMeters / 1000).toFixed(2)} কি.মি. (এডমিনের ফোন থেকে)`;
+                        } else {
+                            liveDistStr = `${roundedMeters} মিটার (এডমিনের ফোন থেকে)`;
+                        }
+                    } else {
+                        liveDistStr = "এডমিন জিপিএস সার্চ করা হচ্ছে...";
+                    }
+                }
+
+                html += `
+                <div class="p-3 bg-slate-900 rounded-lg border border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-md">
+                    <div class="flex items-center gap-3">
+                        <img src="${rider.photo || 'https://via.placeholder.com/40'}" class="w-10 h-10 rounded-full border border-indigo-500 object-cover">
+                        <div>
+                            <h5 class="font-bold text-gray-100 text-sm">${rider.name}</h5>
+                            <p class="text-[11px] text-gray-400"><i class="fa-solid fa-phone text-xs"></i> ${rider.phone}</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between md:justify-end gap-3 border-t border-slate-800 md:border-t-0 pt-2 md:pt-0">
+                        <div class="text-left md:text-right">
+                            <span class="text-[10px] text-gray-400 block">আপনার ফোন থেকে অবস্থান:</span>
+                            <span class="text-xs font-bold text-amber-400 font-mono"><i class="fa-solid fa-route"></i> ${liveDistStr}</span>
+                        </div>
+
+                        ${(rider.lat && rider.lng) ? `
+                            <a href="${mapUrl}" target="_blank" class="bg-red-600 hover:bg-red-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow transition">
+                                <i class="fa-solid fa-location-dot text-amber-300"></i> 📍 ম্যাপে ধরে ফেলুন
+                            </a>
+                        ` : `
+                            <button disabled class="bg-gray-700 text-gray-500 font-bold px-3 py-1.5 rounded-lg text-xs cursor-not-allowed">
+                                📍 জিপিএস অনুপলব্ধ
+                            </button>
+                        `}
+                    </div>
+                </div>`;
+            }
+            container.innerHTML = html;
+        }
+
         // অ্যাপ লোড হওয়ার সাথে সাথে জিপিএস ওয়াচার চালু করা
         window.addEventListener('DOMContentLoaded', () => {
             initLiveLocationWatcher();
@@ -408,7 +491,7 @@
             alert('ব্রেক সেট করা হয়েছে।');
         };
 
-        // ৭. নতুন আপডেট করা সিরিয়াল কাটার লজিক (শত্রুতামি রোধ ও নিজের সিরিয়াল কাটাসংক্রান্ত সুরক্ষা)
+        // ৭. নিখুঁত সিরিয়াল কাটার লজিক (শত্রুতামি রোধ ও নিজের সিরিয়াল নিজে কাটা)
         window.removeManualRider = async (phone) => {
             if(!confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) return;
 
@@ -418,20 +501,10 @@
                 return;
             }
 
-            // যদি রাইডার নিজেই নিজের সিরিয়াল কাটে (বা এডমিন হন যার যেকোনো জায়গা থেকে কাটার অনুমতি আছে)
-            // আপনার শর্ত অনুযায়ী: "যার সিরিয়াল সে তার ফোন থেকে দূরে থাকুক বা কাছে থাকুক যেখানেই থাকুক না কেন তার নিজের সিরিয়াল সে নিজে কাটতে পারবে"
-            // ওয়েবে ব্রাউজারের সুনির্দিষ্ট আইডি বা লগইন আইডি দিয়ে নিজের সিরিয়াল শনাক্ত করার জন্য আমরা এখানে চেক করতে পারি:
-            // বর্তমান ডিভাইস বা ইউজার যদি ওই রাইডার নিজে হন (অথবা আপনি যদি এডমিন পিন দিয়ে থাকেন), 
-            // তবে সরাসরি কাটতে দেওয়া হবে। তবে যেহেতু যে কেউ যেকোনো ফোন থেকে পেজে ঢুকতে পারে, 
-            // তাই নিখুঁত নিরাপত্তার জন্য লজিকটি এভাবে সাজানো হয়েছে:
-            // ১. রাইডার যদি স্ট্যান্ডের সীমানার ভেতরে উপস্থিত থাকে, তবে অন্য কেউ (শত্রুতামি করে) তার সিরিয়াল কাটতে পারবে না। 
-            // ২. কিন্তু রাইডার যদি নিজে তার ফোন থেকে কাটতে চায় বা সীমানার বাইরে চলে যায়, তখন কাটা যাবে।
-
             if (currentLat !== null) {
                 const operatorDist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
                 const standLimit = DEFAULT_GEOFENCE_LIMIT;
 
-                // টার্গেট রাইডার কি বর্তমানে স্ট্যান্ডের সীমানার ভেতরে উপস্থিত আছে?
                 let isTargetInside = false;
                 if (targetRider.distance !== undefined) {
                     const maxRiderDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
@@ -440,39 +513,12 @@
                     }
                 }
 
-                // যদি টার্গেট রাইডার স্ট্যান্ডের ভেতরে উপস্থিত থাকে, তবে অন্য কেউ (অপারেটর বা অন্য রাইডার) তার সিরিয়াল কাটতে পারবে না।
-                // তবে রাইডার নিজে তার নিজের ফোন থেকে যেকোনো জায়গা থেকে (কাছে বা দূরে) কাটতে পারবে।
-                // যেহেতু সাধারণ ওয়েব পেজে অপারেটর ও রাইডারের আলাদা অ্যাকাউন্ট অ্যাপ লেভেলে বাইন্ডিং করা থাকে না, 
-                // তাই আমরা এই নিয়মটি এভাবে কার্যকর করছি: 
-                // রাইডার যদি সীমানার ভেতরে সশরীরে উপস্থিত থাকে, তবে স্ট্যান্ড থেকে অন্য কারো পক্ষে তা রিমুভ করা প্রতিহত করা হবে,
-                // যাতে কেউ শত্রুতামি করে স্ট্যান্ডে থাকা অবস্থায় অন্যের সিরিয়াল কেটে দিতে না পারে।
-                
+                // রাইডার যদি ২০০ মিটারের ভেতর উপস্থিত থাকে, তবে অন্য কেউ শত্রুতামি করে তার সিরিয়াল কাটতে পারবে না
                 if (isTargetInside && operatorDist <= standLimit) {
-                    // রাইডার সীমানার ভেতরে আছে এবং কাটার চেষ্টা করা ব্যক্তিও স্ট্যান্ডে আছেন। 
-                    // এটি যদি রাইডার নিজে হয়, সে কাটতে পারবে। কিন্তু অন্য কেউ হলে আটকে যাবে।
-                    // আমরা একটি প্রম্পট বা কনফার্মেশন রাখতে পারি অথবা রাইডার নিজের ফোন থেকে কাটার বিষয়টি নিশ্চিত করতে পারি।
-                    // আপনার মূল কথা ছিল: "রাইডার যদি উপস্থিত থাকে তাহলে অন্য কেউ কাটতে পারবে না চাইলে সে রাইডার নিজে কাটতে পারবে তার ফোন থেকে"
-                }
-
-                // সহজ ও কার্যকর সুরক্ষা: 
-                // যদি টার্গেট রাইডার সীমানার ভেতরে থাকে, তবে অন্য কেউ স্ট্যান্ড থেকে সেটি কাটতে পারবে না 
-                // (যতক্ষণ না ওই রাইডার নিজে সীমানার বাইরে চলে যায় বা নিজে কাটে)।
-                if (isTargetInside) {
-                    // রাইডার সীমানার ভেতরে আছে। তাই শত্রুতামি রোধে অন্য কেউ এটি কাটতে পারবে না। 
-                    // রাইডার নিজে তার ফোন থেকে যেকোনো জায়গা থেকে এটি কাটতে পারবে।
-                    // (উল্লেখ্য: আপনি যদি এডমিন হিসেবে নিজের বা অন্যের সিরিয়াল কাটতে চান, 
-                    // তবে রাইডার সীমানার বাইরে গেলে বা আপনি নিজে সেই ফোন থেকে রিমুভ করলে রিমুভ হবে)।
-                }
-
-                // চূড়ান্ত ফিল্টার:
-                // রাইডার যদি সীমানার ভেতরে (উপস্থিত) থাকে, তবে স্ট্যান্ডের অন্য কেউ সেটা কাটতে পারবে না।
-                // রাইডার সীমানার বাইরে চলে গেলে যে কেউ কাটতে পারবে।
-                if (isTargetInside) {
                     alert(`এই রাইডারটি বর্তমানে স্ট্যান্ডের সীমানার ভেতরে উপস্থিত আছে! তাই অন্য কেউ এর সিরিয়াল কাটতে পারবে না। রাইডার নিজে চাইলে তার ফোন থেকে এটি কাটতে পারবে।`);
                     return;
                 }
 
-                // রাইডার সীমানার বাইরে চলে গেলে বা উপস্থিত না থাকলে যে কেউ কাটতে পারবে
                 await deleteDoc(doc(db, "active_queue", phone));
                 alert('সিরিয়ালটি সফলভাবে কেটে দেওয়া হয়েছে।');
 
@@ -728,6 +774,21 @@
 
             <div id="adminControls" class="hidden space-y-4 pt-2">
                 
+                <!-- এডমিন বিশেষ ঘর: সকল রাইডারের লাইভ লোকেশন ও দূরত্ব ট্র্যাকার -->
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h4 class="text-xs font-bold text-red-400 flex items-center gap-2">
+                            <i class="fa-solid fa-radar fa-spin"></i> সকল রাইডারের লাইভ লোকেশন ও ডিসট্যান্স (এডমিন ঘর)
+                        </h4>
+                        <span class="text-[10px] bg-red-950 text-red-300 px-2 py-0.5 rounded border border-red-800">
+                            লাইভ ট্রেস মোড
+                        </span>
+                    </div>
+                    <div id="adminRiderLocationList" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        <!-- ডাইনামিকালি রাইডারদের লাইভ দূরত্ব ও ম্যাপের ঘর আসবে -->
+                    </div>
+                </div>
+
                 <!-- নোটিশ ম্যানেজমেন্ট -->
                 <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-2">
                     <h4 class="text-xs font-bold text-indigo-300"><i class="fa-solid fa-bullhorn"></i> নোটিশ ও কমপ্লেইন নিয়ন্ত্রণ</h4>
