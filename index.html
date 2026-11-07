@@ -136,7 +136,7 @@
                 },
                 (error) => {
                     console.error("GPS Watch error:", error);
-                    showGpsStatus("⚠️ জিপিএস সিগন্যাল পাওয়া যাচ্ছে না! লোকেশন পারমিশন ও জিপিএস অন রাখুন।", "amber");
+                    showGpsStatus("⚠️ জিপিএস সিগন্যাল পাওয়া যাচ্ছে না! লোকেশন পারমিশন ও জিপিএস অন রাখুন।", "amber");
                 },
                 { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
             );
@@ -280,21 +280,23 @@
             }
         };
 
-        // ৪. সিরিয়াল তালিকা রিয়েলটাইম শুনো (দূরত্ব ছাড়াই যেকোনো স্থান থেকে তালিকা দেখানোর ব্যবস্থা)
+        // ৪. সিরিয়াল তালিকা রিয়েলটাইম শুনো (সকল রাইডারকে একসাথে দেখানোর লজিক)
         onSnapshot(collection(db, "active_queue"), (snapshot) => {
             activeQueue = [];
             snapshot.forEach((docSnap) => {
-                activeQueue.push({ id: docSnap.id, ...docSnap.data() });
+                const data = docSnap.data();
+                activeQueue.push({ id: docSnap.id, ...data });
             });
 
             activeQueue.sort((a, b) => new Date(a.entryTime) - new Date(b.entryTime));
+            
             const countEl = document.getElementById('queueCount');
             if(countEl) countEl.innerText = activeQueue.length;
             
             renderQueueUIWithoutDistanceRestriction();
         });
 
-        // ৫. কিউ UI রেন্ডার করার ফাংশন (দূরত্ব ছাড়াই তালিকা দেখাবে)
+        // ৫. কিউ UI রেন্ডার করার ফাংশন (দূরত্ব ছাড়াই সবাই তালিকা দেখতে পাবে)
         function renderQueueUIWithoutDistanceRestriction() {
             const container = document.getElementById('activeQueueList');
             if(!container) return;
@@ -406,17 +408,22 @@
             alert('ব্রেক সেট করা হয়েছে।');
         };
 
-        // ৭. ম্যানুয়াল সিরিয়াল কাটা
+        // ৭. সিরিয়াল কাটা (নিজেরটা দূরে থেকে বা অন্যেরটা স্ট্যান্ডের ভেতর থেকে কাটার লজিক)
         window.removeManualRider = async (phone) => {
             if(!confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) return;
 
             if (currentLat !== null) {
                 const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
-                if (dist <= DEFAULT_GEOFENCE_LIMIT) {
+                
+                // চেক করা হচ্ছে এটি কি নিজের সিরিয়াল নাকি অন্য কারো
+                // (যদি ফোন নম্বরের সাথে ইউজারের ফোন মিলে যায় অথবা এডমিনের স্পেশাল দূরত্ব থাকে)
+                const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
+
+                if (dist <= maxAllowedDist) {
                     await deleteDoc(doc(db, "active_queue", phone));
                     alert('সিরিয়ালটি সফলভাবে কেটে দেওয়া হয়েছে।');
                 } else {
-                    alert(`সিরিয়াল কাটার জন্য অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
+                    alert(`এই সিরিয়ালটি কাটার জন্য আপনাকে নির্ধারিত সীমানার (${maxAllowedDist} মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
                 }
             } else {
                 alert('জিপিএস লোকেশন এখনও পাওয়া যায়নি।');
