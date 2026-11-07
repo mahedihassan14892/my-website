@@ -1,4 +1,286 @@
-// ৪. সিরিয়াল তালিকা রিয়েলটাইম শুনো (দূরত্ব ছাড়াই যেকোনো স্থান থেকে তালিকা দেখানোর ব্যবস্থা)
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>বাইক স্ট্যান্ড কন্ট্রোল সিস্টেম</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { 
+            getFirestore, doc, setDoc, getDoc, onSnapshot, collection, deleteDoc, updateDoc
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // ফায়ারবেস কনফিগ
+        const firebaseConfig = {
+            apiKey: "AIzaSyBD2x5i_3hzPuLSIo88llk3-DVuG09S5_c",
+            authDomain: "chandrima-stand.firebaseapp.com",
+            projectId: "chandrima-stand",
+            storageBucket: "chandrima-stand.firebasestorage.app",
+            messagingSenderId: "687907419157",
+            appId: "1:687907419157:web:5feccba5169134c90c8a1c"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // জিপিএস ডিফল্ট অবস্থান ও ডিফল্ট সীমা (মিটার)
+        const STAND_LAT = 23.7593235;
+        const STAND_LNG = 90.3438454;
+        const DEFAULT_GEOFENCE_LIMIT = 200;
+
+        // গ্লোবাল স্টেট ও লাইভ জিপিএস ক্যাশ
+        let activeQueue = [];
+        let specialLimits = {}; 
+        let registeredRidersMap = {}; 
+        let currentLat = null;
+        let currentLng = null;
+        let isLocationInitialized = false;
+
+        // জিপিএস দূরত্ব হিসাব
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        // ছবি কমপ্রেস করার ফাংশন
+        function compressImage(file, maxWidth = 300, maxHeight = 300, quality = 0.6) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > height) {
+                            if (width > maxWidth) {
+                                height = Math.round((height * maxWidth) / width);
+                                width = maxWidth;
+                            }
+                        } else {
+                            if (height > maxHeight) {
+                                width = Math.round((width * maxHeight) / height);
+                                height = maxHeight;
+                            }
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    };
+                    img.onerror = (err) => reject(err);
+                };
+                reader.onerror = (err) => reject(err);
+            });
+        }
+
+        // বিশেষ দূরত্ব লিমিট শুনো
+        onSnapshot(doc(db, "settings", "special_limits"), (docSnap) => {
+            if(docSnap.exists()) {
+                specialLimits = docSnap.data();
+            } else {
+                specialLimits = {};
+            }
+        });
+
+        // লাইভ জিপিএস ওয়াচার (watchPosition) ইনিশিয়ালাইজেশন
+        function initLiveLocationWatcher() {
+            if (!navigator.geolocation) {
+                showGpsStatus("আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।", "red");
+                return;
+            }
+
+            navigator.geolocation.watchPosition(
+                async (position) => {
+                    currentLat = position.coords.latitude;
+                    currentLng = position.coords.longitude;
+                    isLocationInitialized = true;
+
+                    const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
+                    showGpsStatus(`স্ট্যান্ড থেকে আপনার অবস্থান: লিনিয়ার ${Math.round(dist)} মিটার দূরে`, "emerald");
+
+                    // স্বয়ংক্রিয় অটো-এন্ট্রি চেক
+                    for (const phone in registeredRidersMap) {
+                        const riderData = registeredRidersMap[phone];
+                        const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
+                        const inQueue = activeQueue.some(q => q.phone === phone);
+
+                        if (dist <= maxAllowedDist && !inQueue) {
+                            const nowIso = new Date().toISOString();
+                            await setDoc(doc(db, "active_queue", phone), {
+                                name: riderData.name,
+                                phone: phone,
+                                photo: riderData.photo,
+                                entryTime: nowIso,
+                                type: 'online',
+                                distance: Math.round(dist),
+                                breakStatus: null,
+                                breakStartTime: null,
+                                prayerCount: 0,
+                                foodCount: 0
+                            });
+                        }
+                    }
+                },
+                (error) => {
+                    console.error("GPS Watch error:", error);
+                    showGpsStatus("⚠️ জিপিএস সিগন্যাল পাওয়া যাচ্ছে না! লোকেশন পারমিশন ও জিপিএস অন রাখুন।", "amber");
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+            );
+        }
+
+        function showGpsStatus(msg, colorClass) {
+            const el = document.getElementById('gpsAutoStatus');
+            if(el) {
+                el.innerText = msg;
+                el.className = `text-xs p-2 rounded-lg text-center font-medium bg-${colorClass}-50 text-${colorClass}-700 border border-${colorClass}-200 mb-4`;
+            }
+        }
+
+        // ১. রাইডার স্থায়ী রেজিস্ট্রেশন
+        window.registerPermanentRider = async () => {
+            const name = document.getElementById('regName').value.trim();
+            const phone = document.getElementById('regPhone').value.trim();
+            const fileInput = document.getElementById('regPhoto');
+
+            if(!name || !phone || !fileInput.files[0]) {
+                alert('অনুরোধ নিশ্চিত করতে নাম, মোবাইল নম্বর এবং ছবি প্রদান করা বাধ্যতামূলক!');
+                return;
+            }
+
+            try {
+                const photoBase64 = await compressImage(fileInput.files[0]);
+                await setDoc(doc(db, "registered_riders", phone), {
+                    name,
+                    phone,
+                    photo: photoBase64,
+                    registeredAt: new Date().toISOString()
+                });
+                alert('স্থায়ী রাইডার রেজিস্ট্রেশন সফল হয়েছে!');
+                document.getElementById('regName').value = '';
+                document.getElementById('regPhone').value = '';
+                fileInput.value = '';
+            } catch(e) {
+                console.error(e);
+                alert('রেজিস্ট্রেশন সেভ করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+            }
+        };
+
+        // নিবন্ধিত রাইডার ডাটাবেজ শুনো
+        onSnapshot(collection(db, "registered_riders"), (snapshot) => {
+            let html = '';
+            let total = 0;
+            let options = '<option value="">রাইডার সিলেক্ট করুন</option>';
+            registeredRidersMap = {}; 
+
+            snapshot.forEach((docSnap) => {
+                total++;
+                const data = docSnap.data();
+                registeredRidersMap[data.phone] = data;
+
+                options += `<option value="${data.phone}">${data.name} (${data.phone})</option>`;
+                html += `
+                <div class="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border border-slate-200">
+                    <img src="${data.photo || 'https://via.placeholder.com/50'}" class="w-10 h-10 rounded-full object-cover border">
+                    <div class="overflow-hidden">
+                        <p class="font-bold text-xs text-gray-800 truncate">${data.name}</p>
+                        <p class="text-[11px] text-gray-500">${data.phone}</p>
+                    </div>
+                </div>`;
+            });
+            
+            const totalEl = document.getElementById('totalRegisteredCount');
+            if(totalEl) totalEl.innerText = total;
+
+            const listEl = document.getElementById('riderDatabaseList');
+            if(listEl) listEl.innerHTML = html || '<p class="text-xs text-gray-400 col-span-2 text-center">কোন রাইডার নিবন্ধিত নেই</p>';
+            
+            const selectEl = document.getElementById('specialRiderSelect');
+            if(selectEl) selectEl.innerHTML = options;
+        });
+
+        // ২. অটোমেটিক ও ম্যানুয়াল উভয় উপায়ে সিরিয়ালে যুক্ত হওয়ার ফাংশন
+        window.addToSerialQueue = async (type) => {
+            const inputVal = document.getElementById('serialRiderPhone').value.trim();
+            if(!inputVal) { alert('রাইডারের তথ্য বা ফোন নম্বর দিন!'); return; }
+
+            if (!isLocationInitialized || currentLat === null) {
+                alert('জিপিএস লোকেশন এখনো লোড হয়নি। দয়া করে একটু অপেক্ষা করুন।');
+                return;
+            }
+
+            const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
+
+            if (type === 'online') {
+                const riderRef = doc(db, "registered_riders", inputVal);
+                const riderSnap = await getDoc(riderRef);
+
+                if(!riderSnap.exists()) {
+                    alert('এই মোবাইল নম্বরটি নিবন্ধিত নয়! আগে রাইডার রেজিস্ট্রেশন করুন।');
+                    return;
+                }
+
+                const riderData = riderSnap.data();
+                const maxAllowedDist = specialLimits[inputVal] ? Number(specialLimits[inputVal]) : DEFAULT_GEOFENCE_LIMIT;
+
+                if (dist <= maxAllowedDist) {
+                    const nowIso = new Date().toISOString();
+                    await setDoc(doc(db, "active_queue", inputVal), {
+                        name: riderData.name,
+                        phone: inputVal,
+                        photo: riderData.photo,
+                        entryTime: nowIso,
+                        type: type,
+                        distance: Math.round(dist),
+                        breakStatus: null,
+                        breakStartTime: null,
+                        prayerCount: 0,
+                        foodCount: 0
+                    });
+                    alert('অনলাইন সিরিয়ালে যুক্ত হয়েছেন!');
+                    document.getElementById('serialRiderPhone').value = '';
+                } else {
+                    alert(`অনলাইন রাইডার নির্ধারিত সীমানার বাইরে আছেন (দূরত্ব: ${Math.round(dist)} মিটার, অনুমতি: ${maxAllowedDist} মিটার)।`);
+                }
+
+            } else if (type === 'manual') {
+                if (dist <= DEFAULT_GEOFENCE_LIMIT) {
+                    const manualPhone = 'manual_' + Date.now();
+                    const nowIso = new Date().toISOString();
+                    await setDoc(doc(db, "active_queue", manualPhone), {
+                        name: 'ম্যানুয়াল: ' + inputVal,
+                        phone: manualPhone,
+                        photo: 'https://via.placeholder.com/40',
+                        entryTime: nowIso,
+                        type: type,
+                        distance: Math.round(dist),
+                        breakStatus: null,
+                        breakStartTime: null,
+                        prayerCount: 0,
+                        foodCount: 0
+                    });
+                    alert('ম্যানুয়াল সিরিয়ালে সফলভাবে যুক্ত করা হয়েছে!');
+                    document.getElementById('serialRiderPhone').value = '';
+                } else {
+                    alert(`ম্যানুয়াল সিরিয়াল যুক্ত করতে অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
+                }
+            }
+        };
+
+        // ৪. সিরিয়াল তালিকা রিয়েলটাইম শুনো (দূরত্ব ছাড়াই যেকোনো স্থান থেকে তালিকা দেখানোর ব্যবস্থা)
         onSnapshot(collection(db, "active_queue"), (snapshot) => {
             activeQueue = [];
             snapshot.forEach((docSnap) => {
@@ -9,7 +291,6 @@
             const countEl = document.getElementById('queueCount');
             if(countEl) countEl.innerText = activeQueue.length;
             
-            // যেকোনো স্থান থেকেই যেন তালিকা সাথে সাথে স্ক্রিনে রেন্ডার হয়
             renderQueueUIWithoutDistanceRestriction();
         });
 
@@ -92,3 +373,288 @@
             }
             container.innerHTML = html;
         }
+
+        // অ্যাপ লোড হওয়ার সাথে সাথে জিপিএস ওয়াচার চালু করা
+        window.addEventListener('DOMContentLoaded', () => {
+            initLiveLocationWatcher();
+        });
+
+        // ৬. ব্রেক ফাংশন
+        window.takeBreak = async (phone, type) => {
+            const docRef = doc(db, "active_queue", phone);
+            const docSnap = await getDoc(docRef);
+            if(!docSnap.exists()) return;
+
+            const data = docSnap.data();
+            let prayerCount = data.prayerCount || 0;
+            let foodCount = data.foodCount || 0;
+
+            if(type === 'prayer') {
+                if(prayerCount >= 3) { alert('আজকের জন্য ৩ বার নামাজের ব্রেক শেষ!'); return; }
+                prayerCount++;
+            } else if(type === 'food') {
+                if(foodCount >= 1) { alert('আজকের জন্য ১ বার খাবারের ব্রেক শেষ!'); return; }
+                foodCount++;
+            }
+
+            await updateDoc(docRef, {
+                breakStatus: type,
+                breakStartTime: new Date().toISOString(),
+                prayerCount,
+                foodCount
+            });
+            alert('ব্রেক সেট করা হয়েছে।');
+        };
+
+        // ৭. ম্যানুয়াল সিরিয়াল কাটা
+        window.removeManualRider = async (phone) => {
+            if(!confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) return;
+
+            if (currentLat !== null) {
+                const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
+                if (dist <= DEFAULT_GEOFENCE_LIMIT) {
+                    await deleteDoc(doc(db, "active_queue", phone));
+                    alert('সিরিয়ালটি সফলভাবে কেটে দেওয়া হয়েছে।');
+                } else {
+                    alert(`সিরিয়াল কাটার জন্য অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
+                }
+            } else {
+                alert('জিপিএস লোকেশন এখনও পাওয়া যায়নি।');
+            }
+        };
+
+        // ৮. নোটিশ বোর্ড ফাংশন
+        window.updateNoticeBoard = async () => {
+            const text = document.getElementById('adminNoticeText').value.trim();
+            const color = document.getElementById('adminNoticeColor').value;
+            const photoInput = document.getElementById('adminNoticePhoto');
+
+            if(!text) { alert('নোটিশের তথ্য লিখুন!'); return; }
+
+            let photoBase64 = null;
+            if(photoInput.files[0]) {
+                photoBase64 = await compressImage(photoInput.files[0], 600, 600, 0.7);
+            }
+
+            await setDoc(doc(db, "settings", "notice"), {
+                text,
+                color,
+                photo: photoBase64,
+                updatedAt: new Date().toISOString()
+            });
+
+            alert('নোটিশ পাবলিশ হয়েছে!');
+            document.getElementById('adminNoticeText').value = '';
+            photoInput.value = '';
+        };
+
+        onSnapshot(doc(db, "settings", "notice"), (docSnap) => {
+            const display = document.getElementById('publicNoticeBoard');
+            if(docSnap.exists() && docSnap.data().text) {
+                const data = docSnap.data();
+                display.classList.remove('hidden');
+                
+                const isRed = data.color === 'red';
+                display.className = `p-4 rounded-xl shadow-md border-l-4 flex gap-4 items-center ${isRed ? 'bg-red-50 border-red-600 text-red-800' : 'bg-slate-900 border-indigo-500 text-white'}`;
+                
+                document.getElementById('noticeHeading').innerText = isRed ? '⚠️ কমপ্লেইন / বিশেষ বার্তা' : '📢 সাধারণ নোটিশ';
+                document.getElementById('noticeContent').innerText = data.text;
+                
+                const imgEl = document.getElementById('noticeImage');
+                if(data.photo) {
+                    imgEl.src = data.photo;
+                    imgEl.classList.remove('hidden');
+                } else {
+                    imgEl.classList.add('hidden');
+                }
+            } else {
+                display.classList.add('hidden');
+            }
+        });
+
+        // ৯. কমিটি পরিচালনা আপডেট
+        window.updateLeaderProfile = async (role) => {
+            const nameEl = document.getElementById(`${role}Name`);
+            const fileInput = document.getElementById(`${role}Photo`);
+
+            if(!nameEl || !nameEl.value.trim()) { alert('নাম দিন!'); return; }
+
+            let photoBase64 = null;
+            if(fileInput.files[0]) {
+                photoBase64 = await compressImage(fileInput.files[0]);
+            }
+
+            const payload = { name: nameEl.value.trim() };
+            if(photoBase64) payload.photo = photoBase64;
+
+            await setDoc(doc(db, "committee", role), payload, { merge: true });
+            alert('কমিটি আপডেট সফল!');
+            nameEl.value = '';
+            fileInput.value = '';
+        };
+
+        ['president', 'vicePresident', 'organizingSec'].forEach(role => {
+            onSnapshot(doc(db, "committee", role), (docSnap) => {
+                if(docSnap.exists()) {
+                    const data = docSnap.data();
+                    if(data.name) document.getElementById(`display_${role}_name`).innerText = data.name;
+                    if(data.photo) document.getElementById(`display_${role}_img`).src = data.photo;
+                }
+            });
+        });
+
+        // ১০. স্পেশাল ডিসট্যান্স কাস্টমাইজেশন
+        window.setSpecialDistance = async () => {
+            const phone = document.getElementById('specialRiderSelect').value;
+            const distLocation = document.getElementById('specialDistanceInput').value;
+
+            if(!phone || !distLocation) {
+                alert('রাইডার ও দূরত্ব সীমানা প্রবেশ করান!');
+                return;
+            }
+
+            const updatedLimits = { ...specialLimits, [phone]: Number(distLocation) };
+            await setDoc(doc(db, "settings", "special_limits"), updatedLimits);
+            alert(`রাইডার (${phone}) এর জন্য গোপন দূরত্ব সীমানা ${distLocation} মিটার সেট করা হয়েছে!`);
+            document.getElementById('specialDistanceInput').value = '';
+        };
+
+        // ১১. এডমিন আনলক
+        window.unlockAdmin = () => {
+            const pass = document.getElementById('adminPass').value;
+            if(pass === "692372") {
+                document.getElementById('adminControls').classList.remove('hidden');
+                document.getElementById('adminPass').value = '';
+            } else {
+                alert('ভুল পাসওয়ার্ড!');
+            }
+        };
+    </script>
+</head>
+<body class="bg-slate-100 min-h-screen text-gray-800 font-sans pb-12">
+
+    <!-- হেডার -->
+    <header class="bg-indigo-700 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-motorcycle text-2xl text-amber-400"></i>
+                <h1 class="text-xl font-bold tracking-wide">বাইক স্ট্যান্ড কন্ট্রোল</h1>
+            </div>
+            <span class="text-xs bg-indigo-800 px-3 py-1 rounded-full border border-indigo-500">
+                ডিফল্ট সীমানা: ২০০ মি.
+            </span>
+        </div>
+    </header>
+
+    <div class="max-w-4xl mx-auto p-4 space-y-6">
+
+        <!-- জিপিএস লাইভ স্ট্যাটাস ইন্ডিকেটর -->
+        <div id="gpsAutoStatus" class="text-xs p-2 rounded-lg text-center font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <i class="fa-solid fa-location-crosshairs fa-spin"></i> জিপিএস অবস্থান যাচাই করা হচ্ছে...
+        </div>
+
+        <!-- ১. ডাইনামিক নোটিশ বোর্ড -->
+        <div id="publicNoticeBoard" class="hidden p-4 rounded-xl shadow-md border-l-4 flex gap-4 items-center">
+            <img id="noticeImage" class="w-16 h-16 rounded-lg object-cover hidden border" />
+            <div class="flex-1">
+                <h3 id="noticeHeading" class="font-bold text-sm mb-1"></h3>
+                <p id="noticeContent" class="text-xs leading-relaxed"></p>
+            </div>
+        </div>
+
+        <!-- ২. কমিটি পরিচিতি -->
+        <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <h3 class="font-bold text-gray-800 text-sm mb-3 text-center text-indigo-700 uppercase tracking-wider">
+                <i class="fa-solid fa-users"></i> স্ট্যান্ড পরিচালনা কমিটি
+            </h3>
+            <div class="grid grid-cols-3 gap-3">
+                <div class="text-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                    <img id="display_president_img" src="https://via.placeholder.com/100" class="w-16 h-16 mx-auto rounded-full object-cover border-2 border-indigo-500 shadow-sm mb-2">
+                    <p class="font-bold text-xs text-gray-800 truncate" id="display_president_name">সভাপতি</p>
+                    <span class="text-[10px] text-indigo-600 font-semibold block">সভাপতি</span>
+                </div>
+                <div class="text-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                    <img id="display_vicePresident_img" src="https://via.placeholder.com/100" class="w-16 h-16 mx-auto rounded-full object-cover border-2 border-indigo-500 shadow-sm mb-2">
+                    <p class="font-bold text-xs text-gray-800 truncate" id="display_vicePresident_name">সহ-সভাপতি</p>
+                    <span class="text-[10px] text-indigo-600 font-semibold block">সহ-সভাপতি</span>
+                </div>
+                <div class="text-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                    <img id="display_organizingSec_img" src="https://via.placeholder.com/100" class="w-16 h-16 mx-auto rounded-full object-cover border-2 border-indigo-500 shadow-sm mb-2">
+                    <p class="font-bold text-xs text-gray-800 truncate" id="display_organizingSec_name">সাংগঠনিক সম্পাদক</p>
+                    <span class="text-[10px] text-indigo-600 font-semibold block">সাংগঠনিক সম্পাদক</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ৩ ও ৪. রেজিস্ট্রেশন এবং মেম্বার ডাটাবেজ -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-id-card text-indigo-600"></i> নতুন রাইডার রেজিস্ট্রেশন
+                </h3>
+                <div class="space-y-2">
+                    <input type="text" id="regName" placeholder="রাইডারের পূর্ণ নাম" class="w-full p-2 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                    <input type="tel" id="regPhone" placeholder="মোবাইল নম্বর" class="w-full p-2 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-500 block mb-1">ছবি সংযুক্ত করুন (বাধ্যতামূলক)</label>
+                        <input type="file" id="regPhoto" accept="image/*" class="w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                    </div>
+                    <button onclick="registerPermanentRider()" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold text-xs hover:bg-indigo-700 transition">
+                        রেজিস্ট্রেশন জমা দিন
+                    </button>
+                </div>
+            </section>
+
+            <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-gray-800 text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-address-book text-indigo-600"></i> নিবন্ধিত রাইডার তালিকা
+                    </h3>
+                    <span class="text-xs bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                        মোট: <span id="totalRegisteredCount">০</span> জন
+                    </span>
+                </div>
+                <div id="riderDatabaseList" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                    <!-- ডাইনামিকালি রাইডারদের তালিকা আসবে -->
+                </div>
+            </section>
+        </div>
+
+        <!-- ৫. সিরিয়ালে যুক্ত হওয়া (ইনপুট সেকশন) -->
+        <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <h3 class="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-plus-circle text-indigo-600"></i> সিরিয়ালে নাম তুলুন
+            </h3>
+            <div class="flex flex-col md:flex-row gap-2">
+                <input type="text" id="serialRiderPhone" placeholder="নিবন্ধিত মোবাইল নম্বর বা ম্যানুয়াল নাম" class="flex-1 p-2 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                <div class="flex gap-2">
+                    <button onclick="addToSerialQueue('online')" class="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-blue-700 transition">
+                        <i class="fa-solid fa-signal"></i> অনলাইন এন্ট্রি
+                    </button>
+                    <button onclick="addToSerialQueue('manual')" class="flex-1 md:flex-none bg-orange-500 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-orange-600 transition">
+                        <i class="fa-solid fa-hand"></i> ম্যানুয়াল এন্ট্রি
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ৬. রিয়েলটাইম সিরিয়াল কিউ (Active Queue Display) -->
+        <section class="space-y-3">
+            <div class="flex justify-between items-center">
+                <h3 class="font-bold text-gray-800 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-list-ol text-indigo-600"></i> রিয়েলটাইম লাইভ সিরিয়াল
+                </h3>
+                <span class="text-xs bg-indigo-600 text-white font-bold px-3 py-1 rounded-full">
+                    চলতি সিরিয়াল: <span id="queueCount">০</span> জন
+                </span>
+            </div>
+
+            <div id="activeQueueList" class="space-y-2">
+                <!-- ডাইনামিকালি এক্টিভ কিউ কার্ডগুলো এখানে আপডেট হবে -->
+            </div>
+        </section>
+
+        <!-- ৭. অ্যাডমিন কন্ট্রোল প্যানেল (পাসওয়ার্ড প্রটেক্টেড) -->
+        <section class="bg-slate-900 text-white p-4 rounded-xl shadow-lg border border-slate-800 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="font-bold text-sm text-amber-40
