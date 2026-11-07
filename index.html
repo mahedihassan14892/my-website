@@ -30,11 +30,13 @@
         const STAND_LNG = 90.3438454;
         const DEFAULT_GEOFENCE_LIMIT = 200;
 
-        // গ্লোবাল স্টেট
+        // গ্লোবাল স্টেট ও লাইভ জিপিএস ক্যাশ
         let activeQueue = [];
-        let timerInterval = null;
-        let specialLimits = {}; // কাস্টম ডিসট্যান্স ম্যাপ
-        let registeredRidersMap = {}; // রেজিস্ট্রার্ড রাইডার মেমোরি ক্যাশ
+        let specialLimits = {}; 
+        let registeredRidersMap = {}; 
+        let currentLat = null;
+        let currentLng = null;
+        let isLocationInitialized = false;
 
         // জিপিএস দূরত্ব হিসাব
         function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -93,6 +95,65 @@
             }
         });
 
+        // লাইভ জিপিএস ওয়াচার (watchPosition) ইনিশিয়ালাইজেশন
+        function initLiveLocationWatcher() {
+            if (!navigator.geolocation) {
+                showGpsStatus("আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।", "red");
+                return;
+            }
+
+            navigator.geolocation.watchPosition(
+                async (position) => {
+                    currentLat = position.coords.latitude;
+                    currentLng = position.coords.longitude;
+                    isLocationInitialized = true;
+
+                    const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
+                    showGpsStatus(`স্ট্যান্ড থেকে আপনার অবস্থান: লিনিয়ার ${Math.round(dist)} মিটার দূরে`, "emerald");
+
+                    // স্বয়ংক্রিয় অটো-এন্ট্রি চেক
+                    for (const phone in registeredRidersMap) {
+                        const riderData = registeredRidersMap[phone];
+                        const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
+                        const inQueue = activeQueue.some(q => q.phone === phone);
+
+                        if (dist <= maxAllowedDist && !inQueue) {
+                            const nowIso = new Date().toISOString();
+                            await setDoc(doc(db, "active_queue", phone), {
+                                name: riderData.name,
+                                phone: phone,
+                                photo: riderData.photo,
+                                entryTime: nowIso,
+                                type: 'online',
+                                distance: Math.round(dist),
+                                breakStatus: null,
+                                breakStartTime: null,
+                                prayerCount: 0,
+                                foodCount: 0
+                            });
+                            console.log(`অটোমেটিক সিরিয়াল যুক্ত করা হয়েছে: ${riderData.name}`);
+                        }
+                    }
+
+                    // রিয়েলটাইমে কিউ UI এবং জিওফেন্স অটো-রিমুভ চেক করা
+                    processQueueGeofenceAndRender(currentLat, currentLng);
+                },
+                (error) => {
+                    console.error("GPS Watch error:", error);
+                    showGpsStatus("⚠️ জিপিএস সিগন্যাল পাওয়া যাচ্ছে না! লোকেশন পারমিশন ও জিপিএস অন রাখুন।", "amber");
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+            );
+        }
+
+        function showGpsStatus(msg, colorClass) {
+            const el = document.getElementById('gpsAutoStatus');
+            if(el) {
+                el.innerText = msg;
+                el.className = `text-xs p-2 rounded-lg text-center font-medium bg-${colorClass}-50 text-${colorClass}-700 border border-${colorClass}-200 mb-4`;
+            }
+        }
+
         // ১. রাইডার স্থায়ী রেজিস্ট্রেশন
         window.registerPermanentRider = async () => {
             const name = document.getElementById('regName').value.trim();
@@ -122,17 +183,17 @@
             }
         };
 
-        // নিবন্ধিত রাইডার ডাটাবেজ
+        // নিবন্ধিত রাইডার ডাটাবেজ শুনো
         onSnapshot(collection(db, "registered_riders"), (snapshot) => {
             let html = '';
             let total = 0;
             let options = '<option value="">রাইডার সিলেক্ট করুন</option>';
-            registeredRidersMap = {}; // ক্যাশ আপডেট
+            registeredRidersMap = {}; 
 
             snapshot.forEach((docSnap) => {
                 total++;
                 const data = docSnap.data();
-                registeredRidersMap[data.phone] = data; // ক্যাশে রাখা
+                registeredRidersMap[data.phone] = data;
 
                 options += `<option value="${data.phone}">${data.name} (${data.phone})</option>`;
                 html += `
@@ -144,8 +205,12 @@
                     </div>
                 </div>`;
             });
-            document.getElementById('totalRegisteredCount').innerText = total;
-            document.getElementById('riderDatabaseList').innerHTML = html || '<p class="text-xs text-gray-400 col-span-2 text-center">কোন রাইডার নিবন্ধিত নেই</p>';
+            
+            const totalEl = document.getElementById('totalRegisteredCount');
+            if(totalEl) totalEl.innerText = total;
+
+            const listEl = document.getElementById('riderDatabaseList');
+            if(listEl) listEl.innerHTML = html || '<p class="text-xs text-gray-400 col-span-2 text-center">কোন রাইডার নিবন্ধিত নেই</p>';
             
             const selectEl = document.getElementById('specialRiderSelect');
             if(selectEl) selectEl.innerHTML = options;
@@ -156,125 +221,70 @@
             const inputVal = document.getElementById('serialRiderPhone').value.trim();
             if(!inputVal) { alert('রাইডারের তথ্য বা ফোন নম্বর দিন!'); return; }
 
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(async (position) => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    const dist = calculateDistance(lat, lng, STAND_LAT, STAND_LNG);
-
-                    if (type === 'online') {
-                        const riderRef = doc(db, "registered_riders", inputVal);
-                        const riderSnap = await getDoc(riderRef);
-
-                        if(!riderSnap.exists()) {
-                            alert('এই মোবাইল নম্বরটি নিবন্ধিত নয়! আগে রাইডার রেজিস্ট্রেশন করুন।');
-                            return;
-                        }
-
-                        const riderData = riderSnap.data();
-                        const maxAllowedDist = specialLimits[inputVal] ? Number(specialLimits[inputVal]) : DEFAULT_GEOFENCE_LIMIT;
-
-                        if (dist <= maxAllowedDist) {
-                            const nowIso = new Date().toISOString();
-                            await setDoc(doc(db, "active_queue", inputVal), {
-                                name: riderData.name,
-                                phone: inputVal,
-                                photo: riderData.photo,
-                                entryTime: nowIso,
-                                type: type,
-                                distance: Math.round(dist),
-                                breakStatus: null,
-                                breakStartTime: null,
-                                prayerCount: 0,
-                                foodCount: 0
-                            });
-                            alert('অনলাইন সিরিয়ালে যুক্ত হয়েছেন!');
-                            document.getElementById('serialRiderPhone').value = '';
-                        } else {
-                            alert(`অনলাইন রাইডার নির্ধারিত সীমানার বাইরে আছেন (দূরত্ব: ${Math.round(dist)} মিটার, অনুমতি: ${maxAllowedDist} মিটার)।`);
-                        }
-
-                    } else if (type === 'manual') {
-                        if (dist <= DEFAULT_GEOFENCE_LIMIT) {
-                            const manualPhone = 'manual_' + Date.now();
-                            const nowIso = new Date().toISOString();
-                            await setDoc(doc(db, "active_queue", manualPhone), {
-                                name: 'ম্যানুয়াল: ' + inputVal,
-                                phone: manualPhone,
-                                photo: 'https://via.placeholder.com/40',
-                                entryTime: nowIso,
-                                type: type,
-                                distance: Math.round(dist),
-                                breakStatus: null,
-                                breakStartTime: null,
-                                prayerCount: 0,
-                                foodCount: 0
-                            });
-                            alert('ম্যানুয়াল সিরিয়ালে সফলভাবে যুক্ত করা হয়েছে!');
-                            document.getElementById('serialRiderPhone').value = '';
-                        } else {
-                            alert(`ম্যানুয়াল সিরিয়াল যুক্ত করতে অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
-                        }
-                    }
-                }, () => { alert('লোকেশন যাচাইয়ের জন্য জিপিএস পারমিশন প্রয়োজন!'); }, { enableHighAccuracy: true });
-            } else {
-                alert('আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।');
-            }
-        };
-
-        // ৩. স্বয়ংক্রিয় জিপিএস সনাক্তকরণ ও অটো-সিরিয়াল এন্ট্রি ইঞ্জিন
-        function checkAndAutoRegisterLocation() {
-            if (!navigator.geolocation) {
-                showGpsStatus("আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।", "red");
+            if (!isLocationInitialized || currentLat === null) {
+                alert('জিপিএস লোকেশন এখনো লোড হয়নি। দয়া করে একটু অপেক্ষা করুন।');
                 return;
             }
 
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                const dist = calculateDistance(lat, lng, STAND_LAT, STAND_LNG);
+            const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
 
-                showGpsStatus(`স্ট্যান্ড থেকে আপনার অবস্থান: ${Math.round(dist)} মিটার দূরে`, "emerald");
+            if (type === 'online') {
+                const riderRef = doc(db, "registered_riders", inputVal);
+                const riderSnap = await getDoc(riderRef);
 
-                // অ্যাপ চালু রাখলে নিবন্ধিত রাইডার থাকলে সীমানার ভেতরের ড্রাইভার অটো-এন্ট্রি পাবে
-                for (const phone in registeredRidersMap) {
-                    const riderData = registeredRidersMap[phone];
-                    const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
-
-                    // চেক করি রাইডার কি ইতোমধ্যে সিরিয়ালে আছে কিনা
-                    const inQueue = activeQueue.some(q => q.phone === phone);
-
-                    if (dist <= maxAllowedDist && !inQueue) {
-                        const nowIso = new Date().toISOString();
-                        await setDoc(doc(db, "active_queue", phone), {
-                            name: riderData.name,
-                            phone: phone,
-                            photo: riderData.photo,
-                            entryTime: nowIso,
-                            type: 'online',
-                            distance: Math.round(dist),
-                            breakStatus: null,
-                            breakStartTime: null,
-                            prayerCount: 0,
-                            foodCount: 0
-                        });
-                        console.log(`অটোমেটিক সিরিয়াল যুক্ত করা হয়েছে: ${riderData.name}`);
-                    }
+                if(!riderSnap.exists()) {
+                    alert('এই মোবাইল নম্বরটি নিবন্ধিত নয়! আগে রাইডার রেজিস্ট্রেশন করুন।');
+                    return;
                 }
-            }, (error) => {
-                showGpsStatus("⚠️ জিপিএস বন্ধ আছে বা লোকেশন পাওয়া যাচ্ছে না! রিফ্রেশ করুন অথবা জিপিএস অন করে অ্যাপে পুনরায় প্রবেশ করুন।", "amber");
-            }, { enableHighAccuracy: true, timeout: 10000 });
-        }
 
-        function showGpsStatus(msg, colorClass) {
-            const el = document.getElementById('gpsAutoStatus');
-            if(el) {
-                el.innerText = msg;
-                el.className = `text-xs p-2 rounded-lg text-center font-medium bg-${colorClass}-50 text-${colorClass}-700 border border-${colorClass}-200 mb-4`;
+                const riderData = riderSnap.data();
+                const maxAllowedDist = specialLimits[inputVal] ? Number(specialLimits[inputVal]) : DEFAULT_GEOFENCE_LIMIT;
+
+                if (dist <= maxAllowedDist) {
+                    const nowIso = new Date().toISOString();
+                    await setDoc(doc(db, "active_queue", inputVal), {
+                        name: riderData.name,
+                        phone: inputVal,
+                        photo: riderData.photo,
+                        entryTime: nowIso,
+                        type: type,
+                        distance: Math.round(dist),
+                        breakStatus: null,
+                        breakStartTime: null,
+                        prayerCount: 0,
+                        foodCount: 0
+                    });
+                    alert('অনলাইন সিরিয়ালে যুক্ত হয়েছেন!');
+                    document.getElementById('serialRiderPhone').value = '';
+                } else {
+                    alert(`অনলাইন রাইডার নির্ধারিত সীমানার বাইরে আছেন (দূরত্ব: ${Math.round(dist)} মিটার, অনুমতি: ${maxAllowedDist} মিটার)।`);
+                }
+
+            } else if (type === 'manual') {
+                if (dist <= DEFAULT_GEOFENCE_LIMIT) {
+                    const manualPhone = 'manual_' + Date.now();
+                    const nowIso = new Date().toISOString();
+                    await setDoc(doc(db, "active_queue", manualPhone), {
+                        name: 'ম্যানুয়াল: ' + inputVal,
+                        phone: manualPhone,
+                        photo: 'https://via.placeholder.com/40',
+                        entryTime: nowIso,
+                        type: type,
+                        distance: Math.round(dist),
+                        breakStatus: null,
+                        breakStartTime: null,
+                        prayerCount: 0,
+                        foodCount: 0
+                    });
+                    alert('ম্যানুয়াল সিরিয়ালে সফলভাবে যুক্ত করা হয়েছে!');
+                    document.getElementById('serialRiderPhone').value = '';
+                } else {
+                    alert(`ম্যানুয়াল সিরিয়াল যুক্ত করতে অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
+                }
             }
-        }
+        };
 
-        // ৪. সিরিয়াল তালিকা রিয়েলটাইম
+        // ৪. সিরিয়াল তালিকা রিয়েলটাইম শুনো
         onSnapshot(collection(db, "active_queue"), (snapshot) => {
             activeQueue = [];
             snapshot.forEach((docSnap) => {
@@ -282,13 +292,19 @@
             });
 
             activeQueue.sort((a, b) => new Date(a.entryTime) - new Date(b.entryTime));
-            document.getElementById('queueCount').innerText = activeQueue.length;
-            renderQueueUI();
+            const countEl = document.getElementById('queueCount');
+            if(countEl) countEl.innerText = activeQueue.length;
+            
+            if (isLocationInitialized) {
+                processQueueGeofenceAndRender(currentLat, currentLng);
+            }
         });
 
-        // ৫. ওয়েটিং টাইম, জিওফেন্সিং অটো-রিমুভ ও রেন্ডার UI
-        function renderQueueUI() {
+        // ৫. ওয়েটিং টাইম, জিওফেন্সিং অটো-রিমুভ ও রেন্ডার UI (ক্যাচড জিপিএস ব্যবহার করে)
+        async function processQueueGeofenceAndRender(lat, lng) {
             const container = document.getElementById('activeQueueList');
+            if(!container) return;
+
             if(activeQueue.length === 0) {
                 container.innerHTML = '<div class="p-6 text-center text-gray-400 bg-white rounded-xl shadow-sm">বর্তমানে সিরিয়ালে কেউ নেই</div>';
                 return;
@@ -297,102 +313,91 @@
             const now = new Date();
             let html = '';
 
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(async (position) => {
-                    const currentLat = position.coords.latitude;
-                    const currentLng = position.coords.longitude;
+            for (const rider of activeQueue) {
+                const dist = calculateDistance(lat, lng, STAND_LAT, STAND_LNG);
+                const maxAllowedDist = specialLimits[rider.phone] ? Number(specialLimits[rider.phone]) : DEFAULT_GEOFENCE_LIMIT;
 
-                    for (const rider of activeQueue) {
-                        const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
-                        const maxAllowedDist = specialLimits[rider.phone] ? Number(specialLimits[rider.phone]) : DEFAULT_GEOFENCE_LIMIT;
+                // সীমানা পার হয়ে গেলে এবং ব্রেক না থাকলে স্বয়ংক্রিয়ভাবে সিরিয়াল কেটে দেওয়া হবে
+                if (!rider.breakStatus && dist > maxAllowedDist) {
+                    await deleteDoc(doc(db, "active_queue", rider.phone));
+                    continue;
+                }
 
-                        // সীমানা পার হয়ে গেলে এবং ব্রেক না থাকলে স্বয়ংক্রয়ভাবে সিরিয়াল কেটে দেওয়া হবে
-                        if (!rider.breakStatus && dist > maxAllowedDist) {
-                            await deleteDoc(doc(db, "active_queue", rider.phone));
-                            continue;
-                        }
+                const entry = new Date(rider.entryTime);
+                const diffMs = now - entry;
+                
+                const totalSec = Math.floor(diffMs / 1000);
+                const hrs = Math.floor(totalSec / 3600);
+                const mins = Math.floor((totalSec % 3600) / 60);
+                const secs = totalSec % 60;
+                const timeStr = `${hrs > 0 ? hrs + 'ঘণ্টা ' : ''}${mins}মি. ${secs}সে.`;
 
-                        const entry = new Date(rider.entryTime);
-                        const diffMs = now - entry;
-                        
-                        const totalSec = Math.floor(diffMs / 1000);
-                        const hrs = Math.floor(totalSec / 3600);
-                        const mins = Math.floor((totalSec % 3600) / 60);
-                        const secs = totalSec % 60;
-                        const timeStr = `${hrs > 0 ? hrs + 'ঘণ্টা ' : ''}${mins}মি. ${secs}সে.`;
+                let breakBadge = '';
+                if(rider.breakStatus) {
+                    const breakStart = new Date(rider.breakStartTime);
+                    const elapsedMins = Math.floor((now - breakStart) / 60000);
+                    const maxAllowed = rider.breakStatus === 'prayer' ? 50 : 30;
 
-                        let breakBadge = '';
-                        if(rider.breakStatus) {
-                            const breakStart = new Date(rider.breakStartTime);
-                            const elapsedMins = Math.floor((now - breakStart) / 60000);
-                            const maxAllowed = rider.breakStatus === 'prayer' ? 50 : 30;
-
-                            if(elapsedMins >= maxAllowed) {
-                                deleteDoc(doc(db, "active_queue", rider.phone));
-                                continue;
-                            }
-
-                            const remainingMins = maxAllowed - elapsedMins;
-                            breakBadge = `<div class="mt-1 text-xs font-bold ${rider.breakStatus === 'prayer' ? 'text-emerald-600' : 'text-amber-600'}">
-                                <i class="fa-solid fa-clock-rotate-left"></i> ${rider.breakStatus === 'prayer' ? 'নামাজের ব্রেক' : 'খাবারের ব্রেক'} (অবশিষ্ট: ${remainingMins} মি.)
-                            </div>`;
-                        }
-
-                        html += `
-                        <div class="p-3 bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm">
-                                    ${activeQueue.indexOf(rider) + 1}
-                                </div>
-                                <img src="${rider.photo || 'https://via.placeholder.com/40'}" class="w-12 h-12 rounded-full object-cover border">
-                                <div>
-                                    <div class="flex items-center gap-2">
-                                        <h4 class="font-bold text-gray-800 text-sm">${rider.name}</h4>
-                                        <span class="px-2 py-0.5 text-[10px] font-bold rounded ${rider.type === 'online' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}">
-                                            ${rider.type === 'online' ? 'অনলাইন (অটো)' : 'অফলাইন (ম্যানুয়াল)'}
-                                        </span>
-                                    </div>
-                                    <p class="text-xs text-gray-500">${rider.phone}</p>
-                                    ${breakBadge}
-                                </div>
-                            </div>
-
-                            <div class="flex flex-wrap items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-2 md:pt-0">
-                                <div class="text-left md:text-right">
-                                    <p class="text-[10px] text-gray-400">অপেক্ষার সময়</p>
-                                    <p class="text-xs font-mono font-bold text-indigo-600">${timeStr}</p>
-                                </div>
-
-                                <div class="flex gap-1">
-                                    <button onclick="takeBreak('${rider.phone}', 'prayer')" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded text-[11px] font-semibold border border-emerald-200">
-                                        <i class="fa-solid fa-mosque"></i> নামাজ (৫০মি)
-                                    </button>
-                                    <button onclick="takeBreak('${rider.phone}', 'food')" class="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2 py-1 rounded text-[11px] font-semibold border border-amber-200">
-                                        <i class="fa-solid fa-utensils"></i> খাবার (৩০মি)
-                                    </button>
-                                </div>
-
-                                <button onclick="removeManualRider('${rider.phone}')" class="bg-red-50 text-red-600 hover:bg-red-100 px-2.5 py-1 rounded text-xs font-bold border border-red-200">
-                                    <i class="fa-solid fa-trash"></i> সিরিয়াল কাটুন
-                                </button>
-                            </div>
-                        </div>`;
+                    if(elapsedMins >= maxAllowed) {
+                        deleteDoc(doc(db, "active_queue", rider.phone));
+                        continue;
                     }
-                    container.innerHTML = html || '<div class="p-6 text-center text-gray-400 bg-white rounded-xl shadow-sm">বর্তমানে সীমানায় কেউ নেই</div>';
-                }, (err) => {
-                    console.error("Geolocation error:", err);
-                }, { enableHighAccuracy: true });
+
+                    const remainingMins = maxAllowed - elapsedMins;
+                    breakBadge = `<div class="mt-1 text-xs font-bold ${rider.breakStatus === 'prayer' ? 'text-emerald-600' : 'text-amber-600'}">
+                        <i class="fa-solid fa-clock-rotate-left"></i> ${rider.breakStatus === 'prayer' ? 'নামাজের ব্রেক' : 'খাবারের ব্রেক'} (অবশিষ্ট: ${remainingMins} মি.)
+                    </div>`;
+                }
+
+                html += `
+                <div class="p-3 bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm">
+                            ${activeQueue.indexOf(rider) + 1}
+                        </div>
+                        <img src="${rider.photo || 'https://via.placeholder.com/40'}" class="w-12 h-12 rounded-full object-cover border">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h4 class="font-bold text-gray-800 text-sm">${rider.name}</h4>
+                                <span class="px-2 py-0.5 text-[10px] font-bold rounded ${rider.type === 'online' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}">
+                                    ${rider.type === 'online' ? 'অনলাইন (অটো)' : 'অফলাইন (ম্যানুয়াল)'}
+                                </span>
+                            </div>
+                            <p class="text-xs text-gray-500">${rider.phone}</p>
+                            ${breakBadge}
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-2 md:pt-0">
+                        <div class="text-left md:text-right">
+                            <p class="text-[10px] text-gray-400">অপেক্ষার সময়</p>
+                            <p class="text-xs font-mono font-bold text-indigo-600">${timeStr}</p>
+                        </div>
+
+                        <div class="flex gap-1">
+                            <button onclick="takeBreak('${rider.phone}', 'prayer')" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded text-[11px] font-semibold border border-emerald-200">
+                                <i class="fa-solid fa-mosque"></i> নামাজ (৫০মি)
+                            </button>
+                            <button onclick="takeBreak('${rider.phone}', 'food')" class="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2 py-1 rounded text-[11px] font-semibold border border-amber-200">
+                                <i class="fa-solid fa-utensils"></i> খাবার (৩০মি)
+                            </button>
+                        </div>
+
+                        <button onclick="removeManualRider('${rider.phone}')" class="bg-red-50 text-red-600 hover:bg-red-100 px-2.5 py-1 rounded text-xs font-bold border border-red-200">
+                            <i class="fa-solid fa-trash"></i> সিরিয়াল কাটুন
+                        </button>
+                    </div>
+                </div>`;
             }
+            container.innerHTML = html || '<div class="p-6 text-center text-gray-400 bg-white rounded-xl shadow-sm">বর্তমানে সীমানায় কেউ নেই</div>';
         }
 
-        if(!timerInterval) {
-            timerInterval = setInterval(() => {
-                checkAndAutoRegisterLocation(); // অটো জিপিএস চেক
-                if(activeQueue.length > 0) renderQueueUI();
-            }, 3000);
-        }
+        // অ্যাপ লোড হওয়ার সাথে সাথে জিপিএস ওয়াচার চালু করা
+        window.addEventListener('DOMContentLoaded', () => {
+            initLiveLocationWatcher();
+        });
 
-        // ৬. ব্রেক
+        // ৬. ব্রেক ফাংশন
         window.takeBreak = async (phone, type) => {
             const docRef = doc(db, "active_queue", phone);
             const docSnap = await getDoc(docRef);
@@ -423,25 +428,20 @@
         window.removeManualRider = async (phone) => {
             if(!confirm('আপনি কি এই সিরিয়ালটি কাটতে চান?')) return;
 
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(async (position) => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    const dist = calculateDistance(lat, lng, STAND_LAT, STAND_LNG);
-
-                    if (dist <= DEFAULT_GEOFENCE_LIMIT) {
-                        await deleteDoc(doc(db, "active_queue", phone));
-                        alert('সিরিয়ালটি সফলভাবে কেটে দেওয়া হয়েছে।');
-                    } else {
-                        alert(`সিরিয়াল কাটার জন্য অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
-                    }
-                }, () => { alert('লোকেশন যাচাইয়ের জন্য জিপিএস পারমিশন প্রয়োজন!'); }, { enableHighAccuracy: true });
+            if (currentLat !== null) {
+                const dist = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
+                if (dist <= DEFAULT_GEOFENCE_LIMIT) {
+                    await deleteDoc(doc(db, "active_queue", phone));
+                    alert('সিরিয়ালটি সফলভাবে কেটে দেওয়া হয়েছে।');
+                } else {
+                    alert(`সিরিয়াল কাটার জন্য অপারেটরকে অবশ্যই স্ট্যান্ডের সীমানার (২০০ মি.) ভেতর থাকতে হবে। (বর্তমান দূরত্ব: ${Math.round(dist)} মি.)`);
+                }
             } else {
-                alert('আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।');
+                alert('জিপিএস লোকেশন এখনও পাওয়া যায়নি।');
             }
         };
 
-        // ৮. নোটিশ বোর্ড
+        // ৮. নোটিশ বোর্ড ফাংশন
         window.updateNoticeBoard = async () => {
             const text = document.getElementById('adminNoticeText').value.trim();
             const color = document.getElementById('adminNoticeColor').value;
@@ -490,7 +490,7 @@
             }
         });
 
-        // ৯. কমিটি
+        // ৯. কমিটি পরিচালনা আপডেট
         window.updateLeaderProfile = async (role) => {
             const nameEl = document.getElementById(`${role}Name`);
             const fileInput = document.getElementById(`${role}Photo`);
@@ -521,19 +521,19 @@
             });
         });
 
-        // ১০. স্পেশাল ডিসট্যান্স কাস্টমাইজেশন (এডমিন ফিচার)
+        // ১০. স্পেশাল ডিসট্যান্স কাস্টমাইজেশন
         window.setSpecialDistance = async () => {
             const phone = document.getElementById('specialRiderSelect').value;
-            const distLimit = document.getElementById('specialDistanceInput').value;
+            const distLocation = document.getElementById('specialDistanceInput').value;
 
-            if(!phone || !distLimit) {
+            if(!phone || !distLocation) {
                 alert('রাইডার ও দূরত্ব সীমানা প্রবেশ করান!');
                 return;
             }
 
-            const updatedLimits = { ...specialLimits, [phone]: Number(distLimit) };
+            const updatedLimits = { ...specialLimits, [phone]: Number(distLocation) };
             await setDoc(doc(db, "settings", "special_limits"), updatedLimits);
-            alert(`রাইডার (${phone}) এর জন্য গোপন দূরত্ব সীমানা ${distLimit} মিটার সেট করা হয়েছে!`);
+            alert(`রাইডার (${phone}) এর জন্য গোপন দূরত্ব সীমানা ${distLocation} মিটার সেট করা হয়েছে!`);
             document.getElementById('specialDistanceInput').value = '';
         };
 
@@ -623,118 +623,129 @@
                 </div>
             </section>
 
-            <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col">
-                <div class="flex justify-between items-center mb-2">
+            <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-3">
                     <h3 class="font-bold text-gray-800 text-sm flex items-center gap-2">
-                        <i class="fa-solid fa-database text-emerald-600"></i> মেম্বার ডাটাবেজ
+                        <i class="fa-solid fa-address-book text-indigo-600"></i> নিবন্ধিত রাইডার তালিকা
                     </h3>
-                    <span class="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
-                        মোট: <span id="totalRegisteredCount">0</span> জন
+                    <span class="text-xs bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                        মোট: <span id="totalRegisteredCount">০</span> জন
                     </span>
                 </div>
-                <div id="riderDatabaseList" class="grid grid-cols-2 gap-2 overflow-y-auto max-h-48 pr-1 flex-1"></div>
+                <div id="riderDatabaseList" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                    <!-- ডাইনামিকালি রাইডারদের তালিকা আসবে -->
+                </div>
             </section>
         </div>
 
-        <!-- ৫. সিরিয়াল যোগ ফর্ম (অটো এবং ম্যানুয়াল অপশন সহ) -->
-        <section class="bg-indigo-900 text-white p-4 rounded-xl shadow-md">
-            <h3 class="font-bold text-sm mb-2 flex items-center gap-2">
-                <i class="fa-solid fa-list-check text-amber-400"></i> সিরিয়ালে নাম যুক্ত করুন
+        <!-- ৫. সিরিয়ালে যুক্ত হওয়া (ইনপুট সেকশন) -->
+        <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <h3 class="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-plus-circle text-indigo-600"></i> সিরিয়ালে নাম তুলুন
             </h3>
-            <p class="text-[11px] text-indigo-200 mb-3">আপনি সীমানার ভেতর প্রবেশ করলে অ্যাপ স্বয়ংক্রিয়ভাবে সিরিয়াল এন্ট্রি করবে। প্রয়োজন হলে ম্যানুয়ালিও নাম যুক্ত করা যাবে।</p>
-            
-            <div class="flex flex-col sm:flex-row gap-2">
-                <input type="text" id="serialRiderPhone" placeholder="মোবাইল নম্বর বা রাইডারের নাম" class="p-2 text-xs rounded-lg text-gray-800 flex-1 border-0 focus:ring-2 focus:ring-amber-400">
-                <button onclick="addToSerialQueue('online')" class="bg-amber-500 hover:bg-amber-600 text-slate-900 px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1">
-                    <i class="fa-solid fa-wifi"></i> অনলাইন (সিরিয়াল দিন)
-                </button>
-                <button onclick="addToSerialQueue('manual')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1">
-                    <i class="fa-solid fa-keyboard"></i> ম্যানুয়াল সিরিয়াল
-                </button>
+            <div class="flex flex-col md:flex-row gap-2">
+                <input type="text" id="serialRiderPhone" placeholder="নিবন্ধিত মোবাইল নম্বর বা ম্যানুয়াল নাম" class="flex-1 p-2 text-xs border rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                <div class="flex gap-2">
+                    <button onclick="addToSerialQueue('online')" class="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-blue-700 transition">
+                        <i class="fa-solid fa-signal"></i> অনলাইন এন্ট্রি
+                    </button>
+                    <button onclick="addToSerialQueue('manual')" class="flex-1 md:flex-none bg-orange-500 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-orange-600 transition">
+                        <i class="fa-solid fa-hand"></i> ম্যানুয়াল এন্ট্রি
+                    </button>
+                </div>
             </div>
         </section>
 
-        <!-- ৬. লাইভ সিরিয়াল লিস্ট -->
+        <!-- ৬. রিয়েলটাইম সিরিয়াল কিউ (Active Queue Display) -->
         <section class="space-y-3">
             <div class="flex justify-between items-center">
-                <h3 class="font-bold text-gray-800 text-base flex items-center gap-2">
-                    <i class="fa-solid fa-clock text-indigo-600"></i> লাইভ সিরিয়াল লিস্ট
+                <h3 class="font-bold text-gray-800 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-list-ol text-indigo-600"></i> রিয়েলটাইম লাইভ সিরিয়াল
                 </h3>
-                <span class="text-xs bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full font-bold">
-                    সিরিয়ালে উপস্থিত: <span id="queueCount">0</span> জন
+                <span class="text-xs bg-indigo-600 text-white font-bold px-3 py-1 rounded-full">
+                    চলতি সিরিয়াল: <span id="queueCount">০</span> জন
                 </span>
             </div>
 
-            <div id="activeQueueList" class="space-y-2"></div>
+            <div id="activeQueueList" class="space-y-2">
+                <!-- ডাইনামিকালি এক্টিভ কিউ কার্ডগুলো এখানে আপডেট হবে -->
+            </div>
         </section>
 
-        <!-- ৭. এডমিন প্যানেল -->
-        <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-4">
-            <div class="flex justify-between items-center border-b pb-2">
-                <h3 class="font-bold text-gray-800 text-sm flex items-center gap-2">
-                    <i class="fa-solid fa-user-lock text-red-500"></i> এডমিন প্যানেল (ম্যানেজমেন্ট)
+        <!-- ৭. অ্যাডমিন কন্ট্রোল প্যানেল (পাসওয়ার্ড প্রটেক্টেড) -->
+        <section class="bg-slate-900 text-white p-4 rounded-xl shadow-lg border border-slate-800 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="font-bold text-sm text-amber-400 flex items-center gap-2">
+                    <i class="fa-solid fa-user-shield"></i> স্ট্যান্ড এডমিন কন্ট্রোল প্যানেল
                 </h3>
                 <div class="flex gap-2">
-                    <input type="password" id="adminPass" placeholder="পাসওয়ার্ড" class="p-1 text-xs border rounded">
-                    <button onclick="unlockAdmin()" class="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold">লগইন</button>
+                    <input type="password" id="adminPass" placeholder="পিন কোড" class="w-24 p-1 text-xs text-gray-900 rounded focus:outline-none">
+                    <button onclick="unlockAdmin()" class="bg-amber-500 text-slate-900 px-3 py-1 rounded font-bold text-xs hover:bg-amber-400 transition">
+                        আনলক
+                    </button>
                 </div>
             </div>
 
             <div id="adminControls" class="hidden space-y-4 pt-2">
-                <!-- গোপন দূরত্ব সেটিং -->
-                <div class="bg-amber-50 border border-amber-200 p-3 rounded-lg space-y-2">
-                    <h4 class="font-bold text-xs text-amber-900 flex items-center gap-1">
-                        <i class="fa-solid fa-shield-halved"></i> স্পেশাল রাইডার দূরত্ব নির্ধারণ (Secret Override)
-                    </h4>
-                    <div class="flex flex-col sm:flex-row gap-2">
-                        <select id="specialRiderSelect" class="p-1.5 text-xs border rounded bg-white flex-1"></select>
-                        <input type="number" id="specialDistanceInput" placeholder="দূরত্ব (মিটার, যেমন: ৫০০)" class="p-1.5 text-xs border rounded bg-white w-full sm:w-40">
-                        <button onclick="setSpecialDistance()" class="bg-amber-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-amber-700">সেট করুন</button>
-                    </div>
-                </div>
-
-                <!-- নোটিশ পোস্ট -->
-                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
-                    <h4 class="font-bold text-xs text-gray-700">নোটিশ প্রকাশ করুন</h4>
-                    <textarea id="adminNoticeText" rows="2" placeholder="নোটিশের তথ্য..." class="w-full p-2 text-xs border rounded"></textarea>
-                    <div class="flex gap-2 items-center">
-                        <select id="adminNoticeColor" class="p-1 text-xs border rounded">
-                            <option value="black">সাধারণ নোটিশ (কালো)</option>
-                            <option value="red">কমপ্লেইন (লাল)</option>
+                
+                <!-- নোটিশ ম্যানেজমেন্ট -->
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-2">
+                    <h4 class="text-xs font-bold text-indigo-300"><i class="fa-solid fa-bullhorn"></i> নোটিশ ও কমপ্লেইন নিয়ন্ত্রণ</h4>
+                    <textarea id="adminNoticeText" placeholder="নোটিশের বিষয়বস্তু লিখুন..." class="w-full p-2 text-xs text-gray-900 rounded border focus:outline-none"></textarea>
+                    <div class="flex flex-col md:flex-row gap-2 justify-between items-center">
+                        <select id="adminNoticeColor" class="w-full md:w-auto p-1.5 text-xs text-gray-900 rounded">
+                            <option value="indigo">সাধারণ নোটিশ (নীল/কালো)</option>
+                            <option value="red">কমপ্লেইন / জরুরী বার্তা (লাল)</option>
                         </select>
-                        <input type="file" id="adminNoticePhoto" accept="image/*" class="text-xs text-gray-500">
-                        <button onclick="updateNoticeBoard()" class="bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold">পাবলিশ</button>
+                        <input type="file" id="adminNoticePhoto" accept="image/*" class="text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-slate-700 file:text-white">
+                        <button onclick="updateNoticeBoard()" class="w-full md:w-auto bg-indigo-600 text-white px-4 py-1.5 rounded font-bold text-xs hover:bg-indigo-500">
+                            পাবলিশ করুন
+                        </button>
                     </div>
                 </div>
 
-                <!-- কমিটি প্রোফাইল -->
-                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
-                    <h4 class="font-bold text-xs text-gray-700">কমিটি আপডেট করুন</h4>
+                <!-- কাস্টম জিওফেন্স দূরত্ব সেটআপ -->
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-2">
+                    <h4 class="text-xs font-bold text-emerald-300"><i class="fa-solid fa-map-location-dot"></i> কাস্টম জিওফেন্স ডিসট্যান্স সেটিং</h4>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-                        <div class="p-2 border rounded bg-white">
-                            <p class="font-bold text-[11px] mb-1">সভাপতি</p>
-                            <input type="text" id="presidentName" placeholder="নাম" class="w-full p-1 text-xs border rounded mb-1">
-                            <input type="file" id="presidentPhoto" accept="image/*" class="w-full text-[10px]">
-                            <button onclick="updateLeaderProfile('president')" class="mt-1 w-full bg-slate-800 text-white py-1 rounded text-[10px]">সেভ</button>
+                        <select id="specialRiderSelect" class="p-1.5 text-xs text-gray-900 rounded">
+                            <!-- ডাইনামিক রাইডার অপশন আসবে -->
+                        </select>
+                        <input type="number" id="specialDistanceInput" placeholder="অনুমোদিত দূরত্ব (মিটারে, যেমন: ৫০০)" class="p-1.5 text-xs text-gray-900 rounded">
+                        <button onclick="setSpecialDistance()" class="bg-emerald-600 text-white p-1.5 rounded font-bold text-xs hover:bg-emerald-500">
+                            স্পেশাল লিমিট সেট করুন
+                        </button>
+                    </div>
+                </div>
+
+                <!-- কমিটি প্রোফাইল ম্যানেজমেন্ট -->
+                <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-2">
+                    <h4 class="text-xs font-bold text-amber-300"><i class="fa-solid fa-user-pen"></i> পরিচালনা কমিটি পরিবর্তন</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="space-y-1 bg-slate-900 p-2 rounded border border-slate-700">
+                            <p class="text-[11px] font-bold text-indigo-400">সভাপতি</p>
+                            <input type="text" id="presidentName" placeholder="নাম" class="w-full p-1 text-xs text-gray-900 rounded">
+                            <input type="file" id="presidentPhoto" accept="image/*" class="w-full text-[10px] text-gray-400">
+                            <button onclick="updateLeaderProfile('president')" class="w-full bg-slate-700 hover:bg-slate-600 text-white text-[10px] py-1 rounded font-bold">আপডেট</button>
                         </div>
-                        <div class="p-2 border rounded bg-white">
-                            <p class="font-bold text-[11px] mb-1">সহ-সভাপতি</p>
-                            <input type="text" id="vicePresidentName" placeholder="নাম" class="w-full p-1 text-xs border rounded mb-1">
-                            <input type="file" id="vicePresidentPhoto" accept="image/*" class="w-full text-[10px]">
-                            <button onclick="updateLeaderProfile('vicePresident')" class="mt-1 w-full bg-slate-800 text-white py-1 rounded text-[10px]">সেভ</button>
+                        <div class="space-y-1 bg-slate-900 p-2 rounded border border-slate-700">
+                            <p class="text-[11px] font-bold text-indigo-400">সহ-সভাপতি</p>
+                            <input type="text" id="vicePresidentName" placeholder="নাম" class="w-full p-1 text-xs text-gray-900 rounded">
+                            <input type="file" id="vicePresidentPhoto" accept="image/*" class="w-full text-[10px] text-gray-400">
+                            <button onclick="updateLeaderProfile('vicePresident')" class="w-full bg-slate-700 hover:bg-slate-600 text-white text-[10px] py-1 rounded font-bold">আপডেট</button>
                         </div>
-                        <div class="p-2 border rounded bg-white">
-                            <p class="font-bold text-[11px] mb-1">সাংগঠনিক সম্পাদক</p>
-                            <input type="text" id="organizingSecName" placeholder="নাম" class="w-full p-1 text-xs border rounded mb-1">
-                            <input type="file" id="organizingSecPhoto" accept="image/*" class="w-full text-[10px]">
-                            <button onclick="updateLeaderProfile('organizingSec')" class="mt-1 w-full bg-slate-800 text-white py-1 rounded text-[10px]">সেভ</button>
+                        <div class="space-y-1 bg-slate-900 p-2 rounded border border-slate-700">
+                            <p class="text-[11px] font-bold text-indigo-400">সাংগঠনিক সম্পাদক</p>
+                            <input type="text" id="organizingSecName" placeholder="নাম" class="w-full p-1 text-xs text-gray-900 rounded">
+                            <input type="file" id="organizingSecPhoto" accept="image/*" class="w-full text-[10px] text-gray-400">
+                            <button onclick="updateLeaderProfile('organizingSec')" class="w-full bg-slate-700 hover:bg-slate-600 text-white text-[10px] py-1 rounded font-bold">আপডেট</button>
                         </div>
                     </div>
                 </div>
+
             </div>
         </section>
 
     </div>
-
 </body>
 </html>
