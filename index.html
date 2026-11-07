@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>বাইক স্ট্যান্ড কন্ট্রোল ও স্মার্ট নেভিগেশন সিস্টেম</title>
+    <title>বাইক স্ট্যান্ড কন্ট্রোল ও অলটাইম লাইভ ট্র্যাকিং সিস্টেম</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module">
@@ -32,6 +32,7 @@
 
         // গ্লোবাল স্টেট ও লাইভ জিপিএস ক্যাশ
         let activeQueue = [];
+        let allRegisteredRiders = []; // সমস্ত রেজিস্টার্ড রাইডার লিস্ট
         let specialLimits = {}; 
         let registeredRidersMap = {}; 
         let currentLat = null;
@@ -95,7 +96,7 @@
             }
         });
 
-        // লাইভ জিপিএস ওয়াচার (watchPosition) ইনিশিয়ালাইজেশন
+        // লাইভ জিপিএস ওয়াচার (watchPosition) ইনিশিয়ালাইজেশন ও অলটাইম লোকেশন সিঙ্ক
         function initLiveLocationWatcher() {
             if (!navigator.geolocation) {
                 showGpsStatus("আপনার ডিভাইসে জিপিএস সাপোর্ট করে না।", "red");
@@ -111,7 +112,7 @@
                     const distFromStand = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
                     showGpsStatus(`স্ট্যান্ড থেকে আপনার বর্তমান অবস্থান: লিনিয়ার ${Math.round(distFromStand)} মিটার দূরে`, "emerald");
 
-                    // ইউজার এবং এডমিন সবার জন্য লাইভ লোকেশন ক্লাউডে সিঙ্ক করা
+                    // ১. অটোমেটিক কিউ এন্ট্রি চেক
                     for (const phone in registeredRidersMap) {
                         const riderData = registeredRidersMap[phone];
                         const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
@@ -144,8 +145,24 @@
                         }
                     }
 
-                    // এডমিন ট্র্যাকার উইন্ডো ডাইনামিক রি-রেন্ডার করা
-                    renderAdminLocationTracker();
+                    // ২. সমস্ত নিবন্ধিত রাইডারদের জন্য অলটাইম লাইভ লোকেশন আপডেট (ডাটাবেজে সেভ করা যাতে স্ট্যান্ডে না থাকলেও ট্র্যাক করা যায়)
+                    // (যেহেতু এই ব্রাউজারটি ওপেন আছে, তাই এর লোকেশনটি ফায়ারবেসে রাইডার হিসেবে আপডেট হতে থাকবে)
+                    for (const phone in registeredRidersMap) {
+                        await updateDoc(doc(db, "registered_riders", phone), {
+                            lat: currentLat,
+                            lng: currentLng,
+                            lastActive: new Date().toISOString()
+                        }).catch(async () => {
+                            // যদি ফিল্ড না থাকে তবে সেট করে দেওয়া
+                            await setDoc(doc(db, "registered_riders", phone), {
+                                lat: currentLat,
+                                lng: currentLng,
+                                lastActive: new Date().toISOString()
+                            }, { merge: true });
+                        });
+                    }
+
+                    renderAdminAllRidersTracker();
                 },
                 (error) => {
                     console.error("GPS Watch error:", error);
@@ -180,6 +197,8 @@
                     name,
                     phone,
                     photo: photoBase64,
+                    lat: currentLat || STAND_LAT,
+                    lng: currentLng || STAND_LNG,
                     registeredAt: new Date().toISOString()
                 });
                 alert('স্থায়ী রাইডার রেজিস্ট্রেশন সফল হয়েছে!');
@@ -192,17 +211,19 @@
             }
         };
 
-        // নিবন্ধিত রাইডার ডাটাবেজ শুনো
+        // নিবন্ধিত রাইডার ডাটাবেজ শুনো ও অলটাইম লিস্ট তৈরি করা
         onSnapshot(collection(db, "registered_riders"), (snapshot) => {
             let html = '';
             let total = 0;
             let options = '<option value="">রাইডার সিলেক্ট করুন</option>';
             registeredRidersMap = {}; 
+            allRegisteredRiders = [];
 
             snapshot.forEach((docSnap) => {
                 total++;
-                const data = docSnap.data();
+                const data = docSnap.id ? { id: docSnap.id, ...docSnap.data() } : docSnap.data();
                 registeredRidersMap[data.phone] = data;
+                allRegisteredRiders.push(data);
 
                 options += `<option value="${data.phone}">${data.name} (${data.phone})</option>`;
                 html += `
@@ -223,6 +244,8 @@
             
             const selectEl = document.getElementById('specialRiderSelect');
             if(selectEl) selectEl.innerHTML = options;
+
+            renderAdminAllRidersTracker();
         });
 
         // ২. অটোমেটিক ও ম্যানুয়াল উভয় উপায়ে সিরিয়ালে যুক্ত হওয়ার ফাংশন
@@ -313,7 +336,6 @@
             if(countEl) countEl.innerText = activeQueue.length;
             
             renderQueueUIWithoutDistanceRestriction();
-            renderAdminLocationTracker();
         });
 
         // ৫. কিউ UI রেন্ডার করার ফাংশন
@@ -396,23 +418,22 @@
             container.innerHTML = html;
         }
 
-        // এডমিন বিশেষ ঘর: এডমিনের নিজের ফোন থেকে রাইডারদের রিয়েলটাইম লাইভ দূরত্ব ও নেভিগেশন
-        function renderAdminLocationTracker() {
+        // এডমিন বিশেষ ঘর: সমস্ত নিবন্ধিত রাইডারদের অলটাইম লাইভ লোকেশন ও দূরত্ব ট্র্যাকার (স্ট্যান্ডে থাকুক বা পালিয়ে যাক)
+        function renderAdminAllRidersTracker() {
             const container = document.getElementById('adminRiderLocationList');
             if(!container) return;
 
-            if(activeQueue.length === 0) {
-                container.innerHTML = '<p class="text-xs text-gray-400 text-center py-4 bg-slate-900 rounded-lg">বর্তমানে সক্রিয় কোনো রাইডার পাওয়া যায়নি</p>';
+            if(allRegisteredRiders.length === 0) {
+                container.innerHTML = '<p class="text-xs text-gray-400 text-center py-4 bg-slate-900 rounded-lg">কোন নিবন্ধিত রাইডার নেই</p>';
                 return;
             }
 
             let html = '';
-            for(const rider of activeQueue) {
+            for(const rider of allRegisteredRiders) {
                 let liveDistStr = "জিপিএস সিগন্যাল খোঁজা হচ্ছে...";
                 let navUrl = "#";
 
                 if (rider.lat && rider.lng) {
-                    // গুগল ম্যাপস ডাইরেক্ট নেভিগেশন রুট
                     navUrl = `https://www.google.com/maps/dir/?api=1&destination=${rider.lat},${rider.lng}`;
                     
                     if (currentLat !== null && currentLng !== null) {
@@ -514,7 +535,6 @@
                     }
                 }
 
-                // রাইডার যদি ২০০ মিটারের ভেতর উপস্থিত থাকে, তবে অন্য কেউ শত্রুতামি করে তার সিরিয়াল কাটতে পারবে না
                 if (isTargetInside && operatorDist <= standLimit) {
                     alert(`এই রাইডারটি বর্তমানে স্ট্যান্ডের সীমানার ভেতরে উপস্থিত আছে! তাই অন্য কেউ এর সিরিয়াল কাটতে পারবে না। রাইডার নিজে চাইলে তার ফোন থেকে এটি কাটতে পারবে।`);
                     return;
@@ -534,7 +554,7 @@
             const color = document.getElementById('adminNoticeColor').value;
             const photoInput = document.getElementById('adminNoticePhoto');
 
-            if(!text) { alert('নোটিশের তথ্য লিখুন!'); return; }
+            if(!text) { alert('নোটিশের বিষয়বস্তু লিখুন!'); return; }
 
             let photoBase64 = null;
             if(photoInput.files[0]) {
@@ -775,18 +795,18 @@
 
             <div id="adminControls" class="hidden space-y-4 pt-2">
                 
-                <!-- এডমিন বিশেষ ঘর: এডমিনের নিজের ফোন থেকে রাইডারদের রিয়েলটাইম লাইভ দূরত্ব ও নেভিগেশন -->
+                <!-- এডমিন বিশেষ ঘর: সমস্ত রেজিস্টার্ড রাইডারদের অলটাইম লাইভ লোকেশন ও নেভিগেশন -->
                 <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-3">
                     <div class="flex justify-between items-center">
                         <h4 class="text-xs font-bold text-red-400 flex items-center gap-2">
-                            <i class="fa-solid fa-radar fa-spin"></i> সকল রাইডারের লাইভ লোকেশন ও ডিসট্যান্স (এডমিন ঘর)
+                            <i class="fa-solid fa-radar fa-spin"></i> সমস্ত রাইডার অলটাইম লাইভ ট্র্যাকার (পলাতক রাইডার খুঁজুন)
                         </h4>
                         <span class="text-[10px] bg-red-950 text-red-300 px-2 py-0.5 rounded border border-red-800">
-                            লাইভ ট্রেস মোড
+                            সার্বক্ষণিক ট্র্যাকিং
                         </span>
                     </div>
                     <div id="adminRiderLocationList" class="space-y-2 max-h-60 overflow-y-auto pr-1">
-                        <!-- ডাইনামিকালি রাইডারদের লাইভ দূরত্ব ও ম্যাপের ঘর আসবে -->
+                        <!-- ডাইনামিকালি সমস্ত রাইডারদের লাইভ দূরত্ব ও ম্যাপের ঘর আসবে -->
                     </div>
                 </div>
 
