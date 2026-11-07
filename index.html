@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>বাইক স্ট্যান্ড কন্ট্রোল ও লাইভ ট্র্যাকিং সিস্টেম</title>
+    <title>বাইক স্ট্যান্ড কন্ট্রোল ও স্মার্ট নেভিগেশন সিস্টেম</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module">
@@ -38,7 +38,7 @@
         let currentLng = null;
         let isLocationInitialized = false;
 
-        // জিপিএস দূরত্ব হিসাব ফাংশন (দুইটি জিপিএস পয়েন্টের দূরত্ব মিটারে)
+        // জিপিএস দূরত্ব হিসাব (মিটারে)
         function calculateDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
             const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -109,9 +109,9 @@
                     isLocationInitialized = true;
 
                     const distFromStand = calculateDistance(currentLat, currentLng, STAND_LAT, STAND_LNG);
-                    showGpsStatus(`স্ট্যান্ড থেকে আপনার অবস্থান: লিনিয়ার ${Math.round(distFromStand)} মিটার দূরে`, "emerald");
+                    showGpsStatus(`স্ট্যান্ড থেকে আপনার বর্তমান অবস্থান: লিনিয়ার ${Math.round(distFromStand)} মিটার দূরে`, "emerald");
 
-                    // এডমিন ও ইউজারদের লাইভ লোকেশন ফায়ারবেসে আপডেট করা
+                    // ইউজার এবং এডমিন সবার জন্য লাইভ লোকেশন ক্লাউডে সিঙ্ক করা
                     for (const phone in registeredRidersMap) {
                         const riderData = registeredRidersMap[phone];
                         const maxAllowedDist = specialLimits[phone] ? Number(specialLimits[phone]) : DEFAULT_GEOFENCE_LIMIT;
@@ -396,7 +396,7 @@
             container.innerHTML = html;
         }
 
-        // এডমিন প্যানেলের "সকল রাইডারের লাইভ লোকেশন ও ডিসট্যান্স ঘর" রেন্ডার করার ফাংশন
+        // এডমিন বিশেষ ঘর: এডমিনের নিজের ফোন থেকে রাইডারদের রিয়েলটাইম লাইভ দূরত্ব ও নেভিগেশন
         function renderAdminLocationTracker() {
             const container = document.getElementById('adminRiderLocationList');
             if(!container) return;
@@ -408,30 +408,31 @@
 
             let html = '';
             for(const rider of activeQueue) {
-                let liveDistStr = "অজানা (জিপিএস অফ)";
-                let mapUrl = "#";
+                let liveDistStr = "জিপিএস সিগন্যাল খোঁজা হচ্ছে...";
+                let navUrl = "#";
 
                 if (rider.lat && rider.lng) {
-                    mapUrl = `https://www.google.com/maps/dir/?api=1&destination=${rider.lat},${rider.lng}`;
+                    // গুগল ম্যাপস ডাইরেক্ট নেভিগেশন রুট
+                    navUrl = `https://www.google.com/maps/dir/?api=1&destination=${rider.lat},${rider.lng}`;
                     
                     if (currentLat !== null && currentLng !== null) {
                         const distFromAdmin = calculateDistance(currentLat, currentLng, rider.lat, rider.lng);
                         const roundedMeters = Math.round(distFromAdmin);
                         
                         if (roundedMeters >= 1000) {
-                            liveDistStr = `${(roundedMeters / 1000).toFixed(2)} কি.মি. (এডমিনের ফোন থেকে)`;
+                            liveDistStr = `${(roundedMeters / 1000).toFixed(2)} কি.মি. (আপনার ফোন থেকে)`;
                         } else {
-                            liveDistStr = `${roundedMeters} মিটার (এডমিনের ফোন থেকে)`;
+                            liveDistStr = `${roundedMeters} মিটার (আপনার ফোন থেকে)`;
                         }
                     } else {
-                        liveDistStr = "এডমিন জিপিএস সার্চ করা হচ্ছে...";
+                        liveDistStr = "এডমিন জিপিএস সিগন্যাল লোড হচ্ছে...";
                     }
                 }
 
                 html += `
                 <div class="p-3 bg-slate-900 rounded-lg border border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-md">
                     <div class="flex items-center gap-3">
-                        <img src="${rider.photo || 'https://via.placeholder.com/40'}" class="w-10 h-10 rounded-full border border-indigo-500 object-cover">
+                        <img src="${rider.photo || 'https://via.placeholder.com/40'}" class="w-10 h-10 rounded-full border border-amber-500 object-cover">
                         <div>
                             <h5 class="font-bold text-gray-100 text-sm">${rider.name}</h5>
                             <p class="text-[11px] text-gray-400"><i class="fa-solid fa-phone text-xs"></i> ${rider.phone}</p>
@@ -440,13 +441,13 @@
 
                     <div class="flex items-center justify-between md:justify-end gap-3 border-t border-slate-800 md:border-t-0 pt-2 md:pt-0">
                         <div class="text-left md:text-right">
-                            <span class="text-[10px] text-gray-400 block">আপনার ফোন থেকে অবস্থান:</span>
-                            <span class="text-xs font-bold text-amber-400 font-mono"><i class="fa-solid fa-route"></i> ${liveDistStr}</span>
+                            <span class="text-[10px] text-gray-400 block">আপনার ফোন থেকে সঠিক লাইভ দূরত্ব:</span>
+                            <span class="text-xs font-bold text-amber-400 font-mono"><i class="fa-solid fa-compass fa-spin text-amber-500"></i> ${liveDistStr}</span>
                         </div>
 
                         ${(rider.lat && rider.lng) ? `
-                            <a href="${mapUrl}" target="_blank" class="bg-red-600 hover:bg-red-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow transition">
-                                <i class="fa-solid fa-location-dot text-amber-300"></i> 📍 ম্যাপে ধরে ফেলুন
+                            <a href="${navUrl}" target="_blank" class="bg-red-600 hover:bg-red-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow transition">
+                                <i class="fa-solid fa-location-crosshairs text-amber-300"></i> 📍 ম্যাপে ধরে ফেলুন
                             </a>
                         ` : `
                             <button disabled class="bg-gray-700 text-gray-500 font-bold px-3 py-1.5 rounded-lg text-xs cursor-not-allowed">
@@ -774,7 +775,7 @@
 
             <div id="adminControls" class="hidden space-y-4 pt-2">
                 
-                <!-- এডমিন বিশেষ ঘর: সকল রাইডারের লাইভ লোকেশন ও দূরত্ব ট্র্যাকার -->
+                <!-- এডমিন বিশেষ ঘর: এডমিনের নিজের ফোন থেকে রাইডারদের রিয়েলটাইম লাইভ দূরত্ব ও নেভিগেশন -->
                 <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-3">
                     <div class="flex justify-between items-center">
                         <h4 class="text-xs font-bold text-red-400 flex items-center gap-2">
